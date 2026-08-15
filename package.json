@@ -1,0 +1,9 @@
+{
+  "name": "eventpass-mobile-platform",
+  "private": true,
+  "workspaces": [
+    "app",
+    "server",
+    "packages/*"
+  ]
+}
