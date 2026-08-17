@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: eventpass
+      POSTGRES_PASSWORD: eventpass
+      POSTGRES_DB: eventpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - eventpass_pgdata:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: eventpass
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+
+volumes:
+  eventpass_pgdata:

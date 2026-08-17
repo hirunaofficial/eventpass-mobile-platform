@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -10,4 +5,65 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+model User {
+  id             String          @id @default(cuid())
+  email          String          @unique
+  passwordHash   String
+  createdAt      DateTime        @default(now())
+  tickets        Ticket[]
+  itineraryItems ItineraryItem[]
+}
+
+model Venue {
+  id      String  @id @default(cuid())
+  name    String
+  address String
+  lat     Float
+  lng     Float
+  events  Event[]
+}
+
+model Event {
+  id             String          @id @default(cuid())
+  title          String
+  description    String
+  venue          Venue           @relation(fields: [venueId], references: [id])
+  venueId        String
+  startsAt       DateTime
+  endsAt         DateTime
+  capacity       Int
+  remaining      Int
+  imageUrl       String?
+  tickets        Ticket[]
+  itineraryItems ItineraryItem[]
+}
+
+enum TicketStatus {
+  reserved
+  confirmed
+  cancelled
+}
+
+model Ticket {
+  id        String       @id @default(cuid())
+  user      User         @relation(fields: [userId], references: [id])
+  userId    String
+  event     Event        @relation(fields: [eventId], references: [id])
+  eventId   String
+  status    TicketStatus
+  qrToken   String       @unique @default(cuid())
+  createdAt DateTime     @default(now())
+}
+
+model ItineraryItem {
+  id      String   @id @default(cuid())
+  user    User     @relation(fields: [userId], references: [id])
+  userId  String
+  event   Event    @relation(fields: [eventId], references: [id])
+  eventId String
+  addedAt DateTime @default(now())
+
+  @@unique([userId, eventId])
 }
