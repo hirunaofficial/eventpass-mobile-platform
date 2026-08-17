@@ -1,4 +1,4 @@
-# EventPass — Smart Event Discovery & Ticketing Platform — Design Spec
+# EventPass- Smart Event Discovery & Ticketing Platform- Design Spec
 
 **Date:** 2026-08-15
 **Course:** SE5070 – Enterprise Mobility, SLIIT MSc IT
@@ -10,7 +10,7 @@
 EventPass is a mobile app for discovering local entertainment events (concerts,
 meetups, expos, etc.), building a personal clash-free itinerary across
 multiple events/venues, and checking in at the venue via QR scan. It is
-attendee-only (no organizer role) — event data is seeded server-side.
+attendee-only (no organizer role)- event data is seeded server-side.
 
 Core value proposition: unlike a plain calendar, EventPass actively prevents
 the user from committing to events that overlap in time or that are not
@@ -26,11 +26,11 @@ venues), and keeps working when the venue has poor/no connectivity.
 | Backend DB | PostgreSQL + Prisma ORM | Relational fit for Users/Events/Venues/Tickets/Itinerary with clear foreign keys; Prisma keeps schema + migrations fast to iterate solo. |
 | Auth | Email/password, JWT | Real per-user identity needed for itinerary/tickets to persist across devices/reinstalls; gives a concrete endpoint to live-code. |
 | On-device persistence | SQLite (expo-sqlite / op-sqlite) | Embedded relational DB mirroring the server schema; supports real SQL queries for the clash-detection logic while offline. |
-| Payments | Mocked | "Buy Ticket" reserves capacity and shows a fake confirmation — real gateway integration is out of scope for the grading criteria and would dilute effort better spent on offline/constraint/hardware work. |
+| Payments | Mocked | "Buy Ticket" reserves capacity and shows a fake confirmation- real gateway integration is out of scope for the grading criteria and would dilute effort better spent on offline/constraint/hardware work. |
 
 ## 3. User Roles
 
-Single role: **Attendee**. Organizers are not app users in this scope — events
+Single role: **Attendee**. Organizers are not app users in this scope- events
 are seeded into Postgres via a seed script (represents a future
 organizer-facing surface, out of scope for this assignment).
 
@@ -48,7 +48,7 @@ Ticket          (id, userId, eventId, status[reserved|confirmed|cancelled],
 ItineraryItem   (id, userId, eventId, addedAt)
 ```
 
-On-device (SQLite) — mirrors `Event` (cached subset), `Ticket`,
+On-device (SQLite)- mirrors `Event` (cached subset), `Ticket`,
 `ItineraryItem`, plus a local-only table:
 
 ```
@@ -58,23 +58,23 @@ SyncQueueEntry  (id, action[add_itinerary|remove_itinerary|buy_ticket|check_in],
 
 ## 5. Core Flows
 
-1. **Discover** — fetch nearby/upcoming events (GPS-sorted by distance),
+1. **Discover**- fetch nearby/upcoming events (GPS-sorted by distance),
    cache results locally for offline browsing.
-2. **Add to itinerary** — runs the clash-detection check (§6) against the
+2. **Add to itinerary**- runs the clash-detection check (§6) against the
    locally cached itinerary; on success, writes to local SQLite immediately
    (optimistic) and enqueues a `SyncQueueEntry`.
-3. **Buy ticket** — optimistic local `Ticket(status=reserved)` + queued
+3. **Buy ticket**- optimistic local `Ticket(status=reserved)` + queued
    `buy_ticket` action. On sync, server re-validates capacity as the source
    of truth; if sold out while offline, the entry is marked `conflict` and
    surfaced to the user to acknowledge (no silent failure).
-4. **Check-in** — camera scans the event's QR at the venue; validated
+4. **Check-in**- camera scans the event's QR at the venue; validated
    against the locally cached ticket if offline, with a queued `check_in`
    action synced when back online.
-5. **Sync** — a background task drains `SyncQueueEntry` rows against the API
+5. **Sync**- a background task drains `SyncQueueEntry` rows against the API
    whenever connectivity is restored (NetInfo listener), oldest first,
    marking each `synced` or `conflict`.
 
-## 6. Constraint Algorithm — Clash-Aware Itinerary
+## 6. Constraint Algorithm- Clash-Aware Itinerary
 
 **Model:**
 - Variables: each itinerary item (candidate event to add).
@@ -106,7 +106,7 @@ coding defense.
 
 ## 8. Custom Component
 
-`<ItineraryTimeline>` — hand-built vertical timeline (raw `View`/`Animated`,
+`<ItineraryTimeline>`- hand-built vertical timeline (raw `View`/`Animated`,
 no calendar library), rendering the user's itinerary items as time-proportional
 blocks and visually flagging clashes/insufficient-travel-buffer items in red
 before they're resolved.
@@ -156,11 +156,11 @@ Dependencies are installed at their latest stable versions at scaffold
 time (not pinned to older LTS lines), since this is a fresh project with
 no legacy compatibility constraints.
 
-`decision-log.md` and `ai-usage-log.md` are NOT inside this repo — see §11.
+`decision-log.md` and `ai-usage-log.md` are NOT inside this repo- see §11.
 This repo will be published publicly on GitHub as the assignment's source
 link, and those two files are submission material, not source code.
 
-## 11. Decision Records & Failure Log — Process
+## 11. Decision Records & Failure Log- Process
 
 Required by the assignment brief verbatim: *"Outline of Decision Records &
 Failure Logs - You need to document your process of implementation if you
@@ -170,16 +170,16 @@ and errors that you got during your implementation."*
 This is treated as a first-class, continuously-maintained artifact, not
 written retroactively. Both files live **outside this repo**, in
 `eventpass-logs/` alongside the assignment PDF (sibling to
-`eventpass-mobile-platform/`, not a subfolder of it) — since this repo is
+`eventpass-mobile-platform/`, not a subfolder of it)- since this repo is
 published publicly on GitHub as the assignment's source-code link, and
 these logs are project-document submission material, not source code:
 
-- **`eventpass-logs/decision-log.md`** — one entry per notable
+- **`eventpass-logs/decision-log.md`**- one entry per notable
   architectural/design decision: what was decided, why, and what
   alternatives were considered. Seeded from the brainstorming session's
   choices (framework, backend, offline strategy, constraint algorithm
   scope, etc.).
-- **`eventpass-logs/ai-usage-log.md`** — one entry per AI-assisted
+- **`eventpass-logs/ai-usage-log.md`**- one entry per AI-assisted
   implementation step: the prompt used, what was produced, any
   errors/failures hit, and how they were resolved. Updated continuously
   during implementation, including this design/planning session itself as
@@ -190,7 +190,7 @@ subsequent implementation task.
 
 ## 12. Testing & Error Handling Notes
 
-- Server: validate capacity/ownership on every ticket/itinerary mutation —
+- Server: validate capacity/ownership on every ticket/itinerary mutation-
   client-side checks are optimistic UX only, server is the source of truth.
 - Client: sync conflicts (e.g., sold-out while offline) surface as an
   explicit "needs your attention" state, never silently dropped.

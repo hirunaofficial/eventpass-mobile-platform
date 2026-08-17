@@ -1,8 +1,8 @@
-# EventPass Project Scaffold — Implementation Plan
+# EventPass Project Scaffold- Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stand up the EventPass npm-workspaces monorepo — `app/` (Expo/TypeScript), `server/` (Express/TypeScript/Prisma), `packages/shared/` (shared TS types) — as three independently type-checkable, linked workspaces with smoke-tested entry points, ready for feature work.
+**Goal:** Stand up the EventPass npm-workspaces monorepo- `app/` (Expo/TypeScript), `server/` (Express/TypeScript/Prisma), `packages/shared/` (shared TS types)- as three independently type-checkable, linked workspaces with smoke-tested entry points, ready for feature work.
 
 **Architecture:** Single git repo, npm workspaces declared in the root `package.json`. `packages/shared` exports the domain types (`Event`, `Venue`, `Ticket`, `ItineraryItem`) that both `app` and `server` depend on by package name (`@eventpass/shared`), so the API contract can't silently drift. `server` exposes a minimal Express health endpoint and an initialized (not yet connected) Prisma/PostgreSQL setup. `app` is a blank Expo TypeScript app rendering one screen that imports a shared type, proving the wiring end-to-end.
 
@@ -12,16 +12,16 @@
 
 ## Scope Note
 
-This plan covers **Phase 1 only** — project scaffolding ("initiate apps"), matching the immediate request. The spec's other subsystems (auth, event discovery, the clash-detection constraint solver, offline sync queue, camera/GPS/accelerometer integration, and the `<ItineraryTimeline>` custom component) are independent subsystems and will each get their own plan once scaffolding is done, per the spec's structure (§5–§9).
+This plan covers **Phase 1 only**- project scaffolding ("initiate apps"), matching the immediate request. The spec's other subsystems (auth, event discovery, the clash-detection constraint solver, offline sync queue, camera/GPS/accelerometer integration, and the `<ItineraryTimeline>` custom component) are independent subsystems and will each get their own plan once scaffolding is done, per the spec's structure (§5–§9).
 
 ## Global Constraints
 
 - Monorepo via npm workspaces: `["app", "server", "packages/*"]` declared in root `package.json` (spec §10).
 - All dependencies installed via `<package>@latest` at install time, not hand-pinned to older/LTS versions (spec §10, user instruction).
 - TypeScript in all three workspaces (spec §2).
-- Backend: Express + PostgreSQL via Prisma (spec §2). No live Postgres instance is provisioned in this plan — `prisma init` only; DB connection and schema/migrations are a later plan's concern.
+- Backend: Express + PostgreSQL via Prisma (spec §2). No live Postgres instance is provisioned in this plan- `prisma init` only; DB connection and schema/migrations are a later plan's concern.
 - Git commits in this repo must NOT include a `Co-Authored-By` trailer (explicit user instruction).
-- Every task appends an entry to `../eventpass-logs/ai-usage-log.md` recording what was generated and any real errors hit while executing that task's commands (spec §11 — assignment-required Decision Records & Failure Log). If a step's actual output differs from the "Expected" shown below, that difference is exactly what belongs in the log entry — do not silently paper over it.
+- Every task appends an entry to `../eventpass-logs/ai-usage-log.md` recording what was generated and any real errors hit while executing that task's commands (spec §11- assignment-required Decision Records & Failure Log). If a step's actual output differs from the "Expected" shown below, that difference is exactly what belongs in the log entry- do not silently paper over it.
 
 ---
 
@@ -87,7 +87,7 @@ build/
 - [ ] **Step 3: Verify npm recognizes the workspace root**
 
 Run: `npm install`
-Expected: completes with no errors. Since `app/`, `server/`, and `packages/shared/` don't exist yet, npm reports 0 workspaces found — that's correct at this point.
+Expected: completes with no errors. Since `app/`, `server/`, and `packages/shared/` don't exist yet, npm reports 0 workspaces found- that's correct at this point.
 
 - [ ] **Step 4: Commit**
 
@@ -102,7 +102,7 @@ Add an entry to `../eventpass-logs/ai-usage-log.md` (below the existing entries,
 
 ---
 
-### Task 2: `packages/shared` — shared domain types
+### Task 2: `packages/shared`- shared domain types
 
 **Files:**
 - Create: `packages/shared/package.json`
@@ -217,7 +217,7 @@ Add an entry to `../eventpass-logs/ai-usage-log.md`: prompt used, files generate
 
 ---
 
-### Task 3: `server` — Express + TypeScript + Prisma scaffold
+### Task 3: `server`- Express + TypeScript + Prisma scaffold
 
 **Files:**
 - Create: `server/package.json`
@@ -312,7 +312,7 @@ Edit `server/.env.example` so the `DATABASE_URL` line reads:
 ```
 DATABASE_URL="postgresql://user:password@localhost:5432/eventpass?schema=public"
 ```
-(a clearly non-secret placeholder, safe to commit — `server/.env` itself stays gitignored per the root `.gitignore`).
+(a clearly non-secret placeholder, safe to commit- `server/.env` itself stays gitignored per the root `.gitignore`).
 
 - [ ] **Step 8: Verify type-check**
 
@@ -339,7 +339,7 @@ Add an entry to `../eventpass-logs/ai-usage-log.md`: prompt used, files/commands
 
 ---
 
-### Task 4: `app` — Expo TypeScript scaffold
+### Task 4: `app`- Expo TypeScript scaffold
 
 **Files:**
 - Create: `app/` (generated by `create-expo-app`)
@@ -420,7 +420,7 @@ Expected: exits 0 with no output.
 
 - [ ] **Step 7: Manual smoke test (flag for the user, not headless-runnable)**
 
-Run: `npm run start -w app`, then open the printed Expo dev server in Expo Go (device) or a simulator, and confirm the screen shows "EventPass" / "Smart Event Discovery & Ticketing". This step requires a device/simulator and cannot be verified headlessly — do it manually and note the outcome in the AI usage log.
+Run: `npm run start -w app`, then open the printed Expo dev server in Expo Go (device) or a simulator, and confirm the screen shows "EventPass" / "Smart Event Discovery & Ticketing". This step requires a device/simulator and cannot be verified headlessly- do it manually and note the outcome in the AI usage log.
 
 - [ ] **Step 8: Commit**
 
@@ -431,14 +431,14 @@ git commit -m "feat: add Expo app scaffold wired to shared types"
 
 - [ ] **Step 9: Append AI usage log entry**
 
-Add an entry to `../eventpass-logs/ai-usage-log.md`: prompt used, files/commands generated, and the actual results of Steps 6–7 (pass/fail, exact error text if any, and the fix applied — including anything `create-expo-app` prompted for interactively that the command above didn't anticipate).
+Add an entry to `../eventpass-logs/ai-usage-log.md`: prompt used, files/commands generated, and the actual results of Steps 6–7 (pass/fail, exact error text if any, and the fix applied- including anything `create-expo-app` prompted for interactively that the command above didn't anticipate).
 
 ---
 
 ### Task 5: Root integration verification and docs wrap-up
 
 **Files:**
-- Modify: `package.json` (root — add a workspaces-wide `type-check` script)
+- Modify: `package.json` (root- add a workspaces-wide `type-check` script)
 - Modify: `../eventpass-logs/decision-log.md`
 - Modify: `../eventpass-logs/ai-usage-log.md`
 
@@ -474,15 +474,15 @@ Expected: completes with no errors, all three workspaces symlinked under root `n
 - [ ] **Step 3: Run the combined type-check**
 
 Run: `npm run type-check`
-Expected: `packages/shared`, `server`, and `app` (where the app's own `type-check` script may need adding — if `create-expo-app`'s generated `app/package.json` has no `type-check` script, add one: `"type-check": "tsc --noEmit"`) all report success.
+Expected: `packages/shared`, `server`, and `app` (where the app's own `type-check` script may need adding- if `create-expo-app`'s generated `app/package.json` has no `type-check` script, add one: `"type-check": "tsc --noEmit"`) all report success.
 
 - [ ] **Step 4: Update the decision log**
 
-Add an entry to `../eventpass-logs/decision-log.md` dated today, titled "Scaffold phase complete", recording: the actual resolved versions of key dependencies (from `package-lock.json` — e.g. Express, Expo SDK, Prisma, TypeScript versions actually installed), and confirming the Prisma/PostgreSQL connection itself is deferred to the next plan (no live database yet). This file is outside the repo — this step edits it directly, no git action here.
+Add an entry to `../eventpass-logs/decision-log.md` dated today, titled "Scaffold phase complete", recording: the actual resolved versions of key dependencies (from `package-lock.json`- e.g. Express, Expo SDK, Prisma, TypeScript versions actually installed), and confirming the Prisma/PostgreSQL connection itself is deferred to the next plan (no live database yet). This file is outside the repo- this step edits it directly, no git action here.
 
 - [ ] **Step 5: Update the AI usage log**
 
-Add a closing entry to `../eventpass-logs/ai-usage-log.md` summarizing the scaffold phase: total tasks, and an explicit list of every real failure/error hit across Tasks 1–5 with how each was resolved (or "no failures encountered" if genuinely none occurred). Also outside the repo — no git action here.
+Add a closing entry to `../eventpass-logs/ai-usage-log.md` summarizing the scaffold phase: total tasks, and an explicit list of every real failure/error hit across Tasks 1–5 with how each was resolved (or "no failures encountered" if genuinely none occurred). Also outside the repo- no git action here.
 
 - [ ] **Step 6: Commit**
 
@@ -495,6 +495,6 @@ git commit -m "build: add workspace-wide type-check script"
 
 ## Self-Review Notes
 
-- **Spec coverage:** This plan implements spec §10 (project structure) end-to-end and spec §11 (decision/AI-usage logging process) as a per-task habit. Spec §2 (tech stack) is reflected in the actual packages installed. Sections §3–§9 (roles, data model beyond shared types, flows, constraint algorithm, hardware, custom component, offline strategy) are explicitly out of scope for this plan — see "Scope Note" above; they need their own plans.
+- **Spec coverage:** This plan implements spec §10 (project structure) end-to-end and spec §11 (decision/AI-usage logging process) as a per-task habit. Spec §2 (tech stack) is reflected in the actual packages installed. Sections §3–§9 (roles, data model beyond shared types, flows, constraint algorithm, hardware, custom component, offline strategy) are explicitly out of scope for this plan- see "Scope Note" above; they need their own plans.
 - **Type consistency:** `Event`, `Venue`, `Ticket`, `ItineraryItem`, `TicketStatus` are defined once in Task 2 and only ever imported (never redefined) in Tasks 3–4.
-- **No placeholders:** every file has full literal content; every command has an explicit expected result. Where a step's real-world outcome can only be known at execution time (e.g., an actual `tsc` error), the plan requires logging the actual outcome rather than assuming success — that's the AI-usage-log mechanism working as intended, not an unresolved placeholder in the plan itself.
+- **No placeholders:** every file has full literal content; every command has an explicit expected result. Where a step's real-world outcome can only be known at execution time (e.g., an actual `tsc` error), the plan requires logging the actual outcome rather than assuming success- that's the AI-usage-log mechanism working as intended, not an unresolved placeholder in the plan itself.
