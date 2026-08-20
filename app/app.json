@@ -30,6 +30,18 @@
         }
       ],
       "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "EventPass uses the camera to scan ticket QR codes at check-in."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "EventPass uses your location to sort events by distance."
+        }
+      ],
       "expo-sqlite"
     ]
   }
