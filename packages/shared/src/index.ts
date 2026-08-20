@@ -18,6 +18,10 @@ export interface Event {
   imageUrl: string | null;
 }
 
+export interface EventWithVenue extends Event {
+  venue: Venue;
+}
+
 export type TicketStatus = "reserved" | "confirmed" | "cancelled";
 
 export interface Ticket {
@@ -29,9 +33,16 @@ export interface Ticket {
   createdAt: string; // ISO 8601
 }
 
+export interface TicketWithEvent extends Ticket {
+  event: EventWithVenue;
+}
+
 export interface ItineraryItem {
   id: string;
   userId: string;
   eventId: string;
   addedAt: string; // ISO 8601
 }
+
+export { findClash, haversineDistanceKm } from "./clash.js";
+export type { ClashCheckEvent, ClashReason } from "./clash.js";
