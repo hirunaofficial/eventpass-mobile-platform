@@ -4,6 +4,7 @@ import { PortalHost } from "@rn-primitives/portal";
 import { Redirect, Slot, usePathname } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SyncConflictNotice } from "@/components/sync-conflict-notice";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 
 function AuthGate() {
@@ -32,6 +33,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <AuthProvider>
           <AuthGate />
+          <SyncConflictNotice />
           <PortalHost />
         </AuthProvider>
       </SafeAreaProvider>
