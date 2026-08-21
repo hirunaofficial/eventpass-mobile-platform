@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
-import { CalendarDays, CloudOff, LogOut, MapPin, TicketIcon } from "lucide-react-native";
-import { FlatList, RefreshControl, View } from "react-native";
+import { router } from "expo-router";
+import { CloudOff, LogOut, MapPin, TicketIcon } from "lucide-react-native";
+import { FlatList, Pressable, RefreshControl, View } from "react-native";
 import { haversineDistanceKm, type ClashReason, type EventWithVenue } from "@eventpass/shared";
+import { EventImage } from "@/components/event-image";
 
 import {
   AlertDialog,
@@ -44,12 +46,10 @@ function EventCard({
   onBuy: (event: EventWithVenue) => void;
 }) {
   return (
-    <Card className="mb-3">
-      <CardHeader className="flex-row items-center gap-3">
-        <View className="bg-primary h-10 w-10 items-center justify-center rounded-full">
-          <Icon as={CalendarDays} size={18} className="text-primary-foreground" />
-        </View>
-        <View className="flex-1">
+    <Card className="mb-3 overflow-hidden">
+      <Pressable onPress={() => router.push(`/event/${event.id}`)}>
+        <EventImage uri={event.imageUrl} className="h-40 w-full" iconSize={36} />
+        <CardHeader>
           <Text variant="large">{event.title}</Text>
           <View className="flex-row items-center gap-1">
             <Icon as={MapPin} size={12} className="text-muted-foreground" />
@@ -58,20 +58,22 @@ function EventCard({
               {distanceKm !== null ? ` · ${distanceKm.toFixed(1)} km away` : ""}
             </Text>
           </View>
-        </View>
-      </CardHeader>
-      <CardContent className="gap-3">
-        <Text variant="muted">{event.description}</Text>
-        <View className="flex-row gap-2">
-          <Badge variant="secondary">
-            <Text variant="small">{formatEventTime(event.startsAt)}</Text>
-          </Badge>
-          <Badge variant="outline">
-            <Icon as={TicketIcon} size={10} className="text-foreground" />
-            <Text variant="small">{event.remaining} left</Text>
-          </Badge>
-        </View>
-      </CardContent>
+        </CardHeader>
+        <CardContent className="gap-3">
+          <Text variant="muted" numberOfLines={2}>
+            {event.description}
+          </Text>
+          <View className="flex-row gap-2">
+            <Badge variant="secondary">
+              <Text variant="small">{formatEventTime(event.startsAt)}</Text>
+            </Badge>
+            <Badge variant="outline">
+              <Icon as={TicketIcon} size={10} className="text-foreground" />
+              <Text variant="small">{event.remaining} left</Text>
+            </Badge>
+          </View>
+        </CardContent>
+      </Pressable>
       <CardFooter className="justify-end gap-2">
         <Button variant="outline" size="sm" onPress={() => onBuy(event)}>
           <Text>Buy ticket</Text>

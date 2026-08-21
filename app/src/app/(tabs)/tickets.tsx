@@ -1,4 +1,4 @@
-import { CalendarDays, CloudOff, MapPin, QrCode, ScanLine } from "lucide-react-native";
+import { CloudOff, MapPin, QrCode, ScanLine } from "lucide-react-native";
 import { useState } from "react";
 import { router } from "expo-router";
 import { FlatList, Modal, RefreshControl, View } from "react-native";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
+import { EventImage } from "@/components/event-image";
 import { useTickets } from "@/lib/use-tickets";
 
 function formatEventTime(startsAt: string) {
@@ -24,9 +25,7 @@ function TicketCard({ ticket, onShowQr }: { ticket: TicketWithEvent; onShowQr: (
   return (
     <Card className="mb-3">
       <CardHeader className="flex-row items-center gap-3">
-        <View className="bg-primary h-10 w-10 items-center justify-center rounded-full">
-          <Icon as={CalendarDays} size={18} className="text-primary-foreground" />
-        </View>
+        <EventImage uri={ticket.event.imageUrl} className="h-14 w-14 rounded-lg" iconSize={20} />
         <View className="flex-1">
           <Text variant="large">{ticket.event.title}</Text>
           <View className="flex-row items-center gap-1">
