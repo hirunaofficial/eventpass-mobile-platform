@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { useMemo, type ComponentProps, type ReactElement } from "react";
+import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { AlertTriangle, MapPin } from "lucide-react-native";
 import { findClash } from "@eventpass/shared";
@@ -31,6 +31,11 @@ export interface ItineraryTimelineProps {
   items: ItineraryTimelineItem[];
   onItemPress?: (item: ItineraryTimelineItem) => void;
   onConflictPress?: (item: ItineraryTimelineItem) => void;
+  /** Passed straight through to the internal ScrollView, so callers can
+   * wire up pull-to-refresh without the component needing to know
+   * anything about where the data comes from. */
+  refreshControl?: ReactElement<ComponentProps<typeof RefreshControl>>;
+  emptyMessage?: string;
 }
 
 const PIXELS_PER_MINUTE = 1.1;
@@ -50,7 +55,13 @@ function formatDay(iso: string) {
   });
 }
 
-export function ItineraryTimeline({ items, onItemPress, onConflictPress }: ItineraryTimelineProps) {
+export function ItineraryTimeline({
+  items,
+  onItemPress,
+  onConflictPress,
+  refreshControl,
+  emptyMessage = "Your itinerary is empty.",
+}: ItineraryTimelineProps) {
   const sorted = useMemo(
     () => [...items].sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()),
     [items]
@@ -71,16 +82,20 @@ export function ItineraryTimeline({ items, onItemPress, onConflictPress }: Itine
 
   if (sorted.length === 0) {
     return (
-      <View className="items-center justify-center py-12">
-        <Text variant="muted">Your itinerary is empty.</Text>
-      </View>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
+        refreshControl={refreshControl}
+      >
+        <Text variant="muted">{emptyMessage}</Text>
+      </ScrollView>
     );
   }
 
   let lastDay: string | null = null;
 
   return (
-    <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+    <ScrollView className="flex-1" showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
       {sorted.map((item, index) => {
         const isClashing = clashingIds.has(item.id);
         const day = formatDay(item.startsAt);

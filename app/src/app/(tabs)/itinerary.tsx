@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CloudOff } from "lucide-react-native";
-import { View } from "react-native";
+import { RefreshControl, View } from "react-native";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,9 +12,26 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Icon } from "@/components/ui/icon";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { ItineraryTimeline, type ItineraryTimelineItem } from "@/components/itinerary-timeline";
 import { useItinerary, type ItineraryItemWithEvent } from "@/lib/use-itinerary";
+
+function ItineraryTimelineSkeleton() {
+  return (
+    <View className="mt-4 gap-4">
+      {[0, 1, 2].map((i) => (
+        <View key={i} className="flex-row gap-3">
+          <Skeleton className="h-4 w-12 rounded" />
+          <View className="flex-1 gap-2 rounded-md p-3">
+            <Skeleton className="h-4 w-2/3 rounded" />
+            <Skeleton className="h-3 w-1/2 rounded" />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 function toTimelineItem(item: ItineraryItemWithEvent): ItineraryTimelineItem {
   return {
@@ -38,7 +55,7 @@ function formatRange(startsAt: string, endsAt: string) {
 }
 
 export default function ItineraryScreen() {
-  const { items, isLoading, error, isOffline, pendingSyncCount, removeFromItinerary } =
+  const { items, isLoading, isRefreshing, error, isOffline, pendingSyncCount, refresh, removeFromItinerary } =
     useItinerary();
   const [selected, setSelected] = useState<ItineraryTimelineItem | null>(null);
   const [wasClash, setWasClash] = useState(false);
@@ -72,13 +89,13 @@ export default function ItineraryScreen() {
 
         {error ? <Text className="text-destructive mb-2 mt-2">{error}</Text> : null}
 
-        {!isLoading && timelineItems.length === 0 ? (
-          <Text variant="muted" className="mt-4">
-            Nothing here yet- add events from Discover.
-          </Text>
+        {isLoading ? (
+          <ItineraryTimelineSkeleton />
         ) : (
           <ItineraryTimeline
             items={timelineItems}
+            emptyMessage="Nothing here yet- add events from Discover."
+            refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} />}
             onItemPress={(item) => {
               setWasClash(false);
               setSelected(item);

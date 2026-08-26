@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClashReason, EventWithVenue, ItineraryItem } from "@eventpass/shared";
 import { findClash } from "@eventpass/shared";
 import { ApiError, apiFetch } from "@/lib/api";
@@ -15,13 +15,18 @@ export function useItinerary() {
   const { token } = useAuth();
   const [items, setItems] = useState<ItineraryItemWithEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const hasLoadedOnce = useRef(false);
 
   const refresh = useCallback(async () => {
     if (!token) return;
     setError(null);
+    if (hasLoadedOnce.current) {
+      setIsRefreshing(true);
+    }
     try {
       const data = await apiFetch<ItineraryItemWithEvent[]>("/itinerary", { token });
       setItems(data);
@@ -33,6 +38,8 @@ export function useItinerary() {
       setIsOffline(true);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
+      hasLoadedOnce.current = true;
     }
     setPendingSyncCount(await getPendingSyncCount());
   }, [token]);
@@ -118,6 +125,7 @@ export function useItinerary() {
   return {
     items,
     isLoading,
+    isRefreshing,
     error,
     isOffline,
     pendingSyncCount,

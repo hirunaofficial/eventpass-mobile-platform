@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { TicketWithEvent } from "@eventpass/shared";
 import { ApiError, apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -12,13 +12,18 @@ export function useTickets() {
   const { token } = useAuth();
   const [tickets, setTickets] = useState<TicketWithEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const hasLoadedOnce = useRef(false);
 
   const refresh = useCallback(async () => {
     if (!token) return;
     setError(null);
+    if (hasLoadedOnce.current) {
+      setIsRefreshing(true);
+    }
     try {
       const data = await apiFetch<TicketWithEvent[]>("/tickets", { token });
       setTickets(data);
@@ -30,6 +35,8 @@ export function useTickets() {
       setIsOffline(true);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
+      hasLoadedOnce.current = true;
     }
     setPendingSyncCount(await getPendingSyncCount());
   }, [token]);
@@ -66,5 +73,14 @@ export function useTickets() {
     }
   }
 
-  return { tickets, isLoading, error, isOffline, pendingSyncCount, refresh, purchaseTicket };
+  return {
+    tickets,
+    isLoading,
+    isRefreshing,
+    error,
+    isOffline,
+    pendingSyncCount,
+    refresh,
+    purchaseTicket,
+  };
 }

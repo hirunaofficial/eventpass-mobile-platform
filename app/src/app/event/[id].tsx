@@ -118,7 +118,7 @@ export default function EventDetailsScreen() {
       </View>
 
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
-        <EventImage uri={event.imageUrl} className="h-56 w-full" iconSize={48} />
+        <EventImage imageKey={event.imageKey} className="h-56 w-full" iconSize={48} />
 
         <View className="p-4">
           <Text variant="h3">{event.title}</Text>

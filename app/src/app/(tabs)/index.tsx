@@ -48,7 +48,7 @@ function EventCard({
   return (
     <Card className="mb-3 overflow-hidden">
       <Pressable onPress={() => router.push(`/event/${event.id}`)}>
-        <EventImage uri={event.imageUrl} className="h-40 w-full" iconSize={36} />
+        <EventImage imageKey={event.imageKey} className="h-40 w-full" iconSize={36} />
         <CardHeader>
           <Text variant="large">{event.title}</Text>
           <View className="flex-row items-center gap-1">
@@ -88,18 +88,66 @@ function EventCard({
 
 function EventCardSkeleton() {
   return (
-    <Card className="mb-3">
-      <CardHeader className="flex-row items-center gap-3">
-        <Skeleton className="h-10 w-10 rounded-full" />
-        <View className="flex-1 gap-2">
-          <Skeleton className="h-4 w-3/4 rounded" />
-          <Skeleton className="h-3 w-1/2 rounded" />
-        </View>
+    <Card className="mb-3 overflow-hidden">
+      <Skeleton className="h-40 w-full rounded-none" />
+      <CardHeader className="gap-2">
+        <Skeleton className="h-4 w-3/4 rounded" />
+        <Skeleton className="h-3 w-1/2 rounded" />
       </CardHeader>
-      <CardContent>
+      <CardContent className="gap-3">
         <Skeleton className="h-3 w-full rounded" />
+        <View className="flex-row gap-2">
+          <Skeleton className="h-5 w-20 rounded-full" />
+          <Skeleton className="h-5 w-16 rounded-full" />
+        </View>
       </CardContent>
     </Card>
+  );
+}
+
+const CATEGORIES: { key: string; label: string }[] = [
+  { key: "tech", label: "Tech" },
+  { key: "music", label: "Music" },
+  { key: "art", label: "Art" },
+  { key: "business", label: "Business" },
+  { key: "comedy", label: "Comedy" },
+  { key: "wellness", label: "Wellness" },
+  { key: "film", label: "Film" },
+  { key: "sports", label: "Sports" },
+  { key: "food", label: "Food" },
+  { key: "workshop", label: "Workshop" },
+  { key: "classical", label: "Classical" },
+];
+
+function CategoryFilterBar({
+  events,
+  selected,
+  onSelect,
+}: {
+  events: EventWithVenue[];
+  selected: string | null;
+  onSelect: (key: string | null) => void;
+}) {
+  const present = new Set(events.map((e) => e.imageKey).filter((k): k is string => !!k));
+  const options = CATEGORIES.filter((c) => present.has(c.key));
+
+  if (options.length < 2) return null;
+
+  return (
+    <FlatList
+      horizontal
+      data={[{ key: null, label: "All" }, ...options]}
+      keyExtractor={(item) => item.key ?? "all"}
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+      renderItem={({ item }) => (
+        <Pressable onPress={() => onSelect(item.key)}>
+          <Badge variant={selected === item.key ? "default" : "outline"}>
+            <Text variant="small">{item.label}</Text>
+          </Badge>
+        </Pressable>
+      )}
+    />
   );
 }
 
@@ -112,7 +160,7 @@ function clashMessage(reason: ClashReason): string {
 
 export default function Index() {
   const { user, signOut } = useAuth();
-  const { events, isLoading, error, isOffline, refresh } = useEvents();
+  const { events, isLoading, isRefreshing, error, isOffline, refresh } = useEvents();
   const { addToItinerary } = useItinerary();
   const { purchaseTicket } = useTickets();
   const { coords } = useLocation();
@@ -123,14 +171,16 @@ export default function Index() {
   const [purchaseNotice, setPurchaseNotice] = useState<{ title: string; message: string } | null>(
     null
   );
+  const [category, setCategory] = useState<string | null>(null);
 
   const sortedEvents = useMemo(() => {
-    if (!coords) return events;
-    return [...events].sort(
+    const filtered = category ? events.filter((e) => e.imageKey === category) : events;
+    if (!coords) return filtered;
+    return [...filtered].sort(
       (a, b) =>
         haversineDistanceKm(coords, a.venue) - haversineDistanceKm(coords, b.venue)
     );
-  }, [events, coords]);
+  }, [events, coords, category]);
 
   async function handleAdd(event: EventWithVenue) {
     const result = await addToItinerary(event);
@@ -177,6 +227,10 @@ export default function Index() {
 
         {error ? <Text className="text-destructive mb-2">{error}</Text> : null}
 
+        {!isLoading && events.length > 0 ? (
+          <CategoryFilterBar events={events} selected={category} onSelect={setCategory} />
+        ) : null}
+
         {isLoading ? (
           <View>
             <EventCardSkeleton />
@@ -185,6 +239,10 @@ export default function Index() {
           </View>
         ) : events.length === 0 ? (
           <Text variant="muted">No events yet- check back soon.</Text>
+        ) : sortedEvents.length === 0 ? (
+          <Text variant="muted" className="mt-4">
+            No events in this category right now.
+          </Text>
         ) : (
           <FlatList
             data={sortedEvents}
@@ -197,9 +255,9 @@ export default function Index() {
                 onBuy={handleBuy}
               />
             )}
-            contentContainerStyle={{ paddingBottom: 24 }}
+            contentContainerStyle={{ paddingTop: 8, paddingBottom: 24 }}
             showsVerticalScrollIndicator={false}
-            refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} />}
+            refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} />}
           />
         )}
       </View>

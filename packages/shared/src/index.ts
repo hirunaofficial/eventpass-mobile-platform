@@ -15,7 +15,9 @@ export interface Event {
   endsAt: string; // ISO 8601
   capacity: number;
   remaining: number;
-  imageUrl: string | null;
+  // Key into the app's own bundled category illustrations (see
+  // app/src/assets/event-categories/)- not a remote URL.
+  imageKey: string | null;
 }
 
 export interface EventWithVenue extends Event {

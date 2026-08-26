@@ -41,7 +41,11 @@ model Event {
   endsAt         DateTime
   capacity       Int
   remaining      Int
-  imageUrl       String?
+  // A key into the app's own bundled category illustrations (e.g.
+  // "tech", "music")- not a remote URL. All event artwork is
+  // self-authored (see app/src/assets/event-categories/), never a
+  // third-party/stock image.
+  imageKey       String?
   tickets        Ticket[]
   itineraryItems ItineraryItem[]
 }

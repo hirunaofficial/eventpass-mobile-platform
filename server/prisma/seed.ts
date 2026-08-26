@@ -1,18 +1,13 @@
 import "dotenv/config";
+import bcrypt from "bcrypt";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 
+const STAFF_EMAIL = "staff@eventpass.dev";
+const STAFF_PASSWORD = "staffpass123";
+
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
-
-// Lorem Picsum's seeded endpoint returns a real, deterministic stock photo
-// per seed string- same event always shows the same photo, no API key or
-// external account needed. Offline caching only stores the URL (not the
-// image bytes), so a cached/offline view falls back to the app's own
-// placeholder icon if the photo can't load- see EventImage.
-function photo(seed: string) {
-  return `https://picsum.photos/seed/${seed}/800/600`;
-}
 
 async function main() {
   // Reseeding must be idempotent- this script gets re-run before every demo
@@ -24,6 +19,20 @@ async function main() {
   await prisma.itineraryItem.deleteMany();
   await prisma.event.deleteMany();
   await prisma.venue.deleteMany();
+
+  // Staff accounts are provisioned, not self-registered (public signup
+  // always creates attendees)- upsert so re-running the seed doesn't
+  // duplicate or fail on the unique email constraint, and doesn't wipe
+  // real attendee accounts created via signup along the way.
+  await prisma.user.upsert({
+    where: { email: STAFF_EMAIL },
+    update: { role: "staff" },
+    create: {
+      email: STAFF_EMAIL,
+      passwordHash: await bcrypt.hash(STAFF_PASSWORD, 10),
+      role: "staff",
+    },
+  });
 
   const independenceArcade = await prisma.venue.create({
     data: {
@@ -94,7 +103,7 @@ async function main() {
         endsAt: new Date(now + 7 * hour),
         capacity: 100,
         remaining: 42,
-        imageUrl: photo("colombo-tech-meetup"),
+        imageKey: "tech",
       },
       {
         title: "Acoustic Night Live",
@@ -105,7 +114,7 @@ async function main() {
         endsAt: new Date(now + day + 3 * hour),
         capacity: 60,
         remaining: 6,
-        imageUrl: photo("acoustic-night-live"),
+        imageKey: "music",
       },
       {
         title: "Contemporary Art Expo",
@@ -116,7 +125,7 @@ async function main() {
         endsAt: new Date(now + 3 * day + 6 * hour),
         capacity: 200,
         remaining: 156,
-        imageUrl: photo("contemporary-art-expo"),
+        imageKey: "art",
       },
       {
         title: "Startup Pitch Night",
@@ -127,7 +136,7 @@ async function main() {
         endsAt: new Date(now + 4 * day + 2 * hour),
         capacity: 80,
         remaining: 30,
-        imageUrl: photo("startup-pitch-night"),
+        imageKey: "business",
       },
       {
         title: "Jazz & Poetry Evening",
@@ -138,7 +147,7 @@ async function main() {
         endsAt: new Date(now + 5 * day + 3 * hour),
         capacity: 50,
         remaining: 12,
-        imageUrl: photo("jazz-poetry-evening"),
+        imageKey: "music",
       },
       {
         title: "Stand-up Comedy Showcase",
@@ -149,7 +158,7 @@ async function main() {
         endsAt: new Date(now + 2 * day + 2 * hour),
         capacity: 300,
         remaining: 88,
-        imageUrl: photo("standup-comedy-showcase"),
+        imageKey: "comedy",
       },
       {
         title: "Sunset Yoga & Wellness",
@@ -160,7 +169,7 @@ async function main() {
         endsAt: new Date(now + 1 * day + 8 * hour),
         capacity: 120,
         remaining: 97,
-        imageUrl: photo("sunset-yoga-wellness"),
+        imageKey: "wellness",
       },
       {
         title: "Indie Film Screening Night",
@@ -171,7 +180,7 @@ async function main() {
         endsAt: new Date(now + 6 * day + 3 * hour),
         capacity: 90,
         remaining: 51,
-        imageUrl: photo("indie-film-screening"),
+        imageKey: "film",
       },
       {
         title: "Colombo Marathon Expo",
@@ -182,7 +191,7 @@ async function main() {
         endsAt: new Date(now + 7 * day + 8 * hour),
         capacity: 500,
         remaining: 412,
-        imageUrl: photo("colombo-marathon-expo"),
+        imageKey: "sports",
       },
       {
         title: "Craft Beer & Food Festival",
@@ -193,7 +202,7 @@ async function main() {
         endsAt: new Date(now + 8 * day + 6 * hour),
         capacity: 400,
         remaining: 340,
-        imageUrl: photo("craft-beer-food-festival"),
+        imageKey: "food",
       },
       {
         title: "UX/UI Design Workshop",
@@ -204,7 +213,7 @@ async function main() {
         endsAt: new Date(now + 9 * day + 4 * hour),
         capacity: 40,
         remaining: 9,
-        imageUrl: photo("ux-ui-design-workshop"),
+        imageKey: "workshop",
       },
       {
         title: "Symphony Under the Stars",
@@ -215,12 +224,13 @@ async function main() {
         endsAt: new Date(now + 10 * day + 3 * hour),
         capacity: 600,
         remaining: 233,
-        imageUrl: photo("symphony-under-the-stars"),
+        imageKey: "classical",
       },
     ],
   });
 
   console.log("Seeded 6 venues and 12 events.");
+  console.log(`Staff login: ${STAFF_EMAIL} / ${STAFF_PASSWORD}`);
 }
 
 main()
