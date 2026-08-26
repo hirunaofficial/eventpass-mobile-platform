@@ -7,10 +7,16 @@ datasource db {
   provider = "postgresql"
 }
 
+enum UserRole {
+  attendee
+  staff
+}
+
 model User {
   id             String          @id @default(cuid())
   email          String          @unique
   passwordHash   String
+  role           UserRole        @default(attendee)
   createdAt      DateTime        @default(now())
   tickets        Ticket[]
   itineraryItems ItineraryItem[]
@@ -47,14 +53,15 @@ enum TicketStatus {
 }
 
 model Ticket {
-  id        String       @id @default(cuid())
-  user      User         @relation(fields: [userId], references: [id])
-  userId    String
-  event     Event        @relation(fields: [eventId], references: [id])
-  eventId   String
-  status    TicketStatus
-  qrToken   String       @unique @default(cuid())
-  createdAt DateTime     @default(now())
+  id          String       @id @default(cuid())
+  user        User         @relation(fields: [userId], references: [id])
+  userId      String
+  event       Event        @relation(fields: [eventId], references: [id])
+  eventId     String
+  status      TicketStatus
+  qrToken     String       @unique @default(cuid())
+  createdAt   DateTime     @default(now())
+  checkedInAt DateTime?
 }
 
 model ItineraryItem {

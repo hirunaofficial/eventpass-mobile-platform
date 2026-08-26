@@ -31,7 +31,10 @@ export interface Ticket {
   status: TicketStatus;
   qrToken: string;
   createdAt: string; // ISO 8601
+  checkedInAt: string | null; // ISO 8601
 }
+
+export type UserRole = "attendee" | "staff";
 
 export interface TicketWithEvent extends Ticket {
   event: EventWithVenue;

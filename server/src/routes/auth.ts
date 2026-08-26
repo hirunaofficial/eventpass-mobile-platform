@@ -27,11 +27,13 @@ router.post("/signup", async (req, res) => {
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
-    data: { email, passwordHash },
-    select: { id: true, email: true },
+    // Public signup always creates an attendee- staff accounts are
+    // provisioned separately (seed data), never self-registered.
+    data: { email, passwordHash, role: "attendee" },
+    select: { id: true, email: true, role: true },
   });
 
-  res.status(201).json({ token: signToken(user.id), user });
+  res.status(201).json({ token: signToken(user.id, user.role), user });
 });
 
 router.post("/login", async (req, res) => {
@@ -49,15 +51,15 @@ router.post("/login", async (req, res) => {
   }
 
   res.json({
-    token: signToken(user.id),
-    user: { id: user.id, email: user.email },
+    token: signToken(user.id, user.role),
+    user: { id: user.id, email: user.email, role: user.role },
   });
 });
 
 router.get("/me", requireAuth, async (req, res) => {
   const user = await prisma.user.findUnique({
     where: { id: req.userId },
-    select: { id: true, email: true },
+    select: { id: true, email: true, role: true },
   });
   if (!user) {
     res.status(401).json({ error: "User no longer exists" });
