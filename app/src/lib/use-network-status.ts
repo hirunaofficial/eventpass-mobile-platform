@@ -24,9 +24,19 @@ export function useNetworkStatus(onSynced?: (result: SyncResult) => void) {
       setIsOnline(online);
 
       if (online && wasOffline.current && token) {
-        drainSyncQueue(token).then((result) => {
-          onSyncedRef.current?.(result);
-        });
+        drainSyncQueue(token)
+          .then((result) => {
+            onSyncedRef.current?.(result);
+          })
+          .catch((e) => {
+            // Per-item failures are already handled inside
+            // drainSyncQueue (marked 'conflict' or left 'pending'). This
+            // only catches a failure in the drain's own setup (e.g. the
+            // SQLite connection itself)- without this, a promise
+            // rejection here would go unhandled since nothing else
+            // awaits this call.
+            console.error("drainSyncQueue failed unexpectedly", e);
+          });
       }
       wasOffline.current = !online;
     });

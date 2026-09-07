@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db";
-import { apiFetch } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 
 export type SyncAction = "add_itinerary" | "remove_itinerary" | "buy_ticket";
 
@@ -89,9 +89,20 @@ export async function drainSyncQueue(token: string | null): Promise<{ synced: nu
           }
           await db.runAsync("DELETE FROM sync_queue WHERE id = ?", row.id);
           synced++;
-        } catch {
-          await db.runAsync("UPDATE sync_queue SET status = 'conflict' WHERE id = ?", row.id);
-          conflicts++;
+        } catch (e) {
+          if (e instanceof ApiError) {
+            // A real rejection from a reachable server (e.g. sold out,
+            // already removed)- genuinely needs the user's attention.
+            await db.runAsync("UPDATE sync_queue SET status = 'conflict' WHERE id = ?", row.id);
+            conflicts++;
+          } else {
+            // Network dropped again mid-drain. Leave this (and every
+            // row after it) 'pending' rather than mislabeling a
+            // transient failure as a permanent conflict- stop here so
+            // the next reconnect retries them in the original order
+            // instead of skipping ahead.
+            break;
+          }
         }
       }
 

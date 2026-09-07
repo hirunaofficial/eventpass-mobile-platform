@@ -3,7 +3,6 @@ import { CloudOff } from "lucide-react-native";
 import { RefreshControl, View } from "react-native";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -11,10 +10,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { ItineraryTimeline, type ItineraryTimelineItem } from "@/components/itinerary-timeline";
+import { ApiError } from "@/lib/api";
 import { useItinerary, type ItineraryItemWithEvent } from "@/lib/use-itinerary";
 
 function ItineraryTimelineSkeleton() {
@@ -59,13 +60,27 @@ export default function ItineraryScreen() {
     useItinerary();
   const [selected, setSelected] = useState<ItineraryTimelineItem | null>(null);
   const [wasClash, setWasClash] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
 
   const timelineItems = items.map(toTimelineItem);
 
   async function handleRemove() {
     if (!selected) return;
-    await removeFromItinerary(selected.id);
-    setSelected(null);
+    setRemoveError(null);
+    setIsRemoving(true);
+    try {
+      await removeFromItinerary(selected.id);
+      setSelected(null);
+    } catch (e) {
+      // removeFromItinerary re-throws on a real server rejection (as
+      // opposed to "offline," which it already handles by queuing)- if
+      // that happens, keep the dialog open and say why instead of
+      // leaving the user wondering if "Remove" did anything.
+      setRemoveError(e instanceof ApiError ? e.message : "Couldn't remove this item.");
+    } finally {
+      setIsRemoving(false);
+    }
   }
 
   return (
@@ -108,7 +123,15 @@ export default function ItineraryScreen() {
         )}
       </View>
 
-      <AlertDialog open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
+      <AlertDialog
+        open={selected !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelected(null);
+            setRemoveError(null);
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{selected?.title}</AlertDialogTitle>
@@ -119,13 +142,14 @@ export default function ItineraryScreen() {
               {wasClash ? "\n\nThis clashes with another item in your itinerary." : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {removeError ? <Text className="text-destructive">{removeError}</Text> : null}
           <AlertDialogFooter>
             <AlertDialogCancel>
               <Text>Close</Text>
             </AlertDialogCancel>
-            <AlertDialogAction onPress={handleRemove}>
-              <Text>Remove</Text>
-            </AlertDialogAction>
+            <Button onPress={handleRemove} disabled={isRemoving}>
+              <Text>{isRemoving ? "Removing..." : "Remove"}</Text>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
