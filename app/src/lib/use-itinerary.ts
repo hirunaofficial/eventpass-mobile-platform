@@ -12,7 +12,7 @@ export type ItineraryItemWithEvent = ItineraryItem & { event: EventWithVenue };
 type AddResult = { ok: true } | { ok: false; reason: ClashReason };
 
 export function useItinerary() {
-  const { token } = useAuth();
+  const { token, signOut } = useAuth();
   const [items, setItems] = useState<ItineraryItemWithEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -31,8 +31,19 @@ export function useItinerary() {
       const data = await apiFetch<ItineraryItemWithEvent[]>("/itinerary", { token });
       setItems(data);
       setIsOffline(false);
-      await cacheItinerary(data);
-    } catch {
+      try {
+        await cacheItinerary(data);
+      } catch (cacheErr) {
+        // See use-events.ts- a cache-write failure after a successful
+        // fetch shouldn't regress already-correct state.
+        console.error("Failed to cache itinerary locally", cacheErr);
+      }
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        // The session itself is invalid, not "offline"- see use-events.ts.
+        await signOut();
+        return;
+      }
       const cached = await getCachedItinerary();
       setItems(cached);
       setIsOffline(true);
@@ -42,7 +53,7 @@ export function useItinerary() {
       hasLoadedOnce.current = true;
     }
     setPendingSyncCount(await getPendingSyncCount());
-  }, [token]);
+  }, [token, signOut]);
 
   // Auto-drains queued offline changes the moment connectivity returns,
   // then refetches so local optimistic entries are replaced by real data.

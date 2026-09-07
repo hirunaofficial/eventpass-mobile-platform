@@ -8,6 +8,26 @@ export class ApiError extends Error {
   }
 }
 
+// zod validation failures come back as { error: { field: ["message"] } },
+// not a string- routes send `parsed.error.flatten().fieldErrors` as-is.
+// Without this, every validation error (bad email, short password,
+// missing eventId/qrToken) silently became a useless generic "Request
+// failed" instead of the actual reason.
+function extractErrorMessage(body: unknown): string {
+  if (!body || typeof body !== "object" || !("error" in body)) {
+    return "Request failed";
+  }
+  const error = (body as { error: unknown }).error;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const messages = Object.values(error as Record<string, unknown>)
+      .flat()
+      .filter((m): m is string => typeof m === "string");
+    if (messages.length > 0) return messages.join(" ");
+  }
+  return "Request failed";
+}
+
 export async function apiFetch<T>(
   path: string,
   options: RequestInit & { token?: string | null } = {}
@@ -29,9 +49,7 @@ export async function apiFetch<T>(
   const body = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const message =
-      body && typeof body.error === "string" ? body.error : "Request failed";
-    throw new ApiError(response.status, message);
+    throw new ApiError(response.status, extractErrorMessage(body));
   }
 
   return body as T;

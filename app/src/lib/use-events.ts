@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EventWithVenue } from "@eventpass/shared";
-import { apiFetch } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { cacheEvents, getCachedEvents } from "@/lib/cache";
 
@@ -14,7 +14,7 @@ type UseEventsResult = {
 };
 
 export function useEvents(): UseEventsResult {
-  const { token } = useAuth();
+  const { token, signOut } = useAuth();
   const [events, setEvents] = useState<EventWithVenue[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -35,8 +35,24 @@ export function useEvents(): UseEventsResult {
       const data = await apiFetch<EventWithVenue[]>("/events", { token });
       setEvents(data);
       setIsOffline(false);
-      await cacheEvents(data);
-    } catch {
+      try {
+        await cacheEvents(data);
+      } catch (cacheErr) {
+        // The fetch already succeeded and state is already correct- a
+        // failure writing today's cache snapshot shouldn't regress the
+        // UI back to stale data or falsely claim we're offline. Just
+        // means a future offline session won't have this batch cached.
+        console.error("Failed to cache events locally", cacheErr);
+      }
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        // The session itself is invalid (not "offline")- falling back
+        // to cached data here would silently show stale events forever
+        // with no way for the user to realize they need to log back
+        // in. Sign out so AuthGate routes them to /login instead.
+        await signOut();
+        return;
+      }
       const cached = await getCachedEvents();
       if (cached.length > 0) {
         setEvents(cached);
@@ -49,7 +65,7 @@ export function useEvents(): UseEventsResult {
       setIsRefreshing(false);
       hasLoadedOnce.current = true;
     }
-  }, [token]);
+  }, [token, signOut]);
 
   useEffect(() => {
     refresh();

@@ -9,7 +9,7 @@ import { useNetworkStatus } from "@/lib/use-network-status";
 type PurchaseResult = { ok: true; queued?: boolean } | { ok: false; error: string };
 
 export function useTickets() {
-  const { token } = useAuth();
+  const { token, signOut } = useAuth();
   const [tickets, setTickets] = useState<TicketWithEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -28,8 +28,19 @@ export function useTickets() {
       const data = await apiFetch<TicketWithEvent[]>("/tickets", { token });
       setTickets(data);
       setIsOffline(false);
-      await cacheTickets(data);
-    } catch {
+      try {
+        await cacheTickets(data);
+      } catch (cacheErr) {
+        // See use-events.ts- a cache-write failure after a successful
+        // fetch shouldn't regress already-correct state.
+        console.error("Failed to cache tickets locally", cacheErr);
+      }
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        // The session itself is invalid, not "offline"- see use-events.ts.
+        await signOut();
+        return;
+      }
       const cached = await getCachedTickets();
       setTickets(cached);
       setIsOffline(true);
@@ -39,7 +50,7 @@ export function useTickets() {
       hasLoadedOnce.current = true;
     }
     setPendingSyncCount(await getPendingSyncCount());
-  }, [token]);
+  }, [token, signOut]);
 
   useNetworkStatus(refresh);
 

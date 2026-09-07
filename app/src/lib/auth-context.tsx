@@ -1,15 +1,17 @@
 import * as SecureStore from "expo-secure-store";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
   type ReactNode,
 } from "react";
 import type { UserRole } from "@eventpass/shared";
-import { apiFetch } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 
 const TOKEN_KEY = "eventpass_token";
+const USER_KEY = "eventpass_user";
 
 type AuthUser = { id: string; email: string; role: UserRole };
 
@@ -40,8 +42,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const me = await apiFetch<AuthUser>("/auth/me", { token: storedToken });
         setToken(storedToken);
         setUser(me);
-      } catch {
-        await SecureStore.deleteItemAsync(TOKEN_KEY);
+        await SecureStore.setItemAsync(USER_KEY, JSON.stringify(me));
+      } catch (e) {
+        if (e instanceof ApiError) {
+          // A real rejection from a reachable server (401: token
+          // genuinely invalid/expired)- signing out is correct here.
+          await SecureStore.deleteItemAsync(TOKEN_KEY);
+          await SecureStore.deleteItemAsync(USER_KEY);
+        } else {
+          // Network unreachable- NOT the same as "logged out." Falling
+          // back to deleting the token here would sign out any user who
+          // opens the app offline, then trap them: /login also needs
+          // network, so they'd have no way back in until reconnecting.
+          // Stay signed in using the last-known user, so every other
+          // screen's own offline/cache handling can take over normally.
+          const cachedUser = await SecureStore.getItemAsync(USER_KEY);
+          if (cachedUser) {
+            setToken(storedToken);
+            setUser(JSON.parse(cachedUser) as AuthUser);
+          }
+        }
       } finally {
         setIsLoading(false);
       }
@@ -53,28 +73,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ): Promise<AuthUser> {
     const { token: newToken, user: newUser } = await promise;
     await SecureStore.setItemAsync(TOKEN_KEY, newToken);
+    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
     return newUser;
   }
 
-  async function signIn(email: string, password: string) {
+  const signIn = useCallback((email: string, password: string) => {
     return handleAuthResponse(
       apiFetch("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) })
     );
-  }
+  }, []);
 
-  async function signUp(email: string, password: string) {
+  const signUp = useCallback((email: string, password: string) => {
     return handleAuthResponse(
       apiFetch("/auth/signup", { method: "POST", body: JSON.stringify({ email, password }) })
     );
-  }
+  }, []);
 
-  async function signOut() {
+  // Stable across renders (useCallback, empty deps)- consumed as a
+  // dependency by hooks like useEvents/useItinerary/useTickets to sign
+  // out on a 401. An unstable signOut would make their `refresh`
+  // callback a new reference every render, retriggering their mount
+  // effect in a loop.
+  const signOut = useCallback(async () => {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
+    await SecureStore.deleteItemAsync(USER_KEY);
     setToken(null);
     setUser(null);
-  }
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, token, isLoading, signIn, signUp, signOut }}>
