@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClashReason, EventWithVenue, ItineraryItem } from "@eventpass/shared";
-import { findClash } from "@eventpass/shared";
+import type {
+  ClashReason,
+  EventWithVenue,
+  ItineraryItem,
+  Resolution,
+} from "@eventpass/shared";
+import { findClash, suggestAlternatives } from "@eventpass/shared";
 import { ApiError, apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { cacheItinerary, getCachedItinerary } from "@/lib/cache";
@@ -9,7 +14,12 @@ import { useNetworkStatus } from "@/lib/use-network-status";
 
 export type ItineraryItemWithEvent = ItineraryItem & { event: EventWithVenue };
 
-type AddResult = { ok: true } | { ok: false; reason: ClashReason };
+// A rejection carries the repair options alongside the reason, so the UI
+// never has to present a dead end- see suggestAlternatives() in
+// packages/shared/src/clash.ts.
+type AddResult =
+  | { ok: true }
+  | { ok: false; reason: ClashReason; resolutions: Resolution[] };
 
 export function useItinerary() {
   const { token, signOut } = useAuth();
@@ -63,7 +73,10 @@ export function useItinerary() {
     refresh();
   }, [refresh]);
 
-  async function addToItinerary(event: EventWithVenue): Promise<AddResult> {
+  async function addToItinerary(
+    event: EventWithVenue,
+    catalogue: EventWithVenue[] = []
+  ): Promise<AddResult> {
     const existing = items.map((item) => ({
       id: item.event.id,
       startsAt: item.event.startsAt,
@@ -79,7 +92,20 @@ export function useItinerary() {
 
     const localClash = findClash(candidate, existing);
     if (localClash) {
-      return { ok: false, reason: localClash };
+      // Constraint violated. Rather than stopping at "no", compute the
+      // repairs: a different event that fits, or one item to drop.
+      const resolutions = suggestAlternatives(
+        { ...candidate, category: event.imageKey },
+        existing,
+        catalogue.map((e) => ({
+          id: e.id,
+          startsAt: e.startsAt,
+          endsAt: e.endsAt,
+          venue: { lat: e.venue.lat, lng: e.venue.lng },
+          category: e.imageKey,
+        }))
+      );
+      return { ok: false, reason: localClash, resolutions };
     }
 
     try {
@@ -97,6 +123,7 @@ export function useItinerary() {
         return {
           ok: false,
           reason: { type: "time_overlap", withEventId: event.id },
+          resolutions: [],
         };
       }
 

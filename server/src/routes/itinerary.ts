@@ -1,11 +1,26 @@
+/**
+ * Itinerary routes - where the constraint algorithm is ENFORCED.
+ *
+ * The app also runs findClash() locally for instant feedback, but this
+ * is the authoritative check: another device could have changed the
+ * itinerary since the client last synced. Both sides import the same
+ * function from @eventpass/shared, so they cannot disagree on the rules.
+ */
 import { Router } from "express";
 import { z } from "zod";
-import { findClash, type ClashCheckEvent } from "@eventpass/shared";
+import {
+  findClash,
+  suggestAlternatives,
+  type ClashCheckEvent,
+  type SuggestionCandidate,
+} from "@eventpass/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
 
+// GET /itinerary - this user's plan, ordered by start time so the
+// client can render a timeline without re-sorting.
 router.get("/", requireAuth, async (req, res) => {
   const items = await prisma.itineraryItem.findMany({
     where: { userId: req.userId },
@@ -17,6 +32,8 @@ router.get("/", requireAuth, async (req, res) => {
 
 const addItemSchema = z.object({ eventId: z.string() });
 
+// POST /itinerary - add an event, subject to the constraints.
+// 201 on success, 409 + { clash, resolutions } when rejected.
 router.post("/", requireAuth, async (req, res) => {
   const parsed = addItemSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -39,6 +56,9 @@ router.post("/", requireAuth, async (req, res) => {
     include: { event: { include: { venue: true } } },
   });
 
+  // Both sides are mapped to the algorithm's minimal shape (id, times,
+  // venue coords). Prisma returns Date objects; the shared function
+  // works in ISO strings so the same code runs in the browser/app.
   const candidate: ClashCheckEvent = {
     id: candidateEvent.id,
     startsAt: candidateEvent.startsAt.toISOString(),
@@ -54,7 +74,33 @@ router.post("/", requireAuth, async (req, res) => {
 
   const clash = findClash(candidate, existing);
   if (clash) {
-    res.status(409).json({ error: "This event clashes with your itinerary", clash });
+    // The server is the authoritative constraint check, so it also owns
+    // the authoritative repair options- a client working from a stale
+    // cache could otherwise propose an alternative that is itself no
+    // longer valid. The catalogue is read fresh here for that reason.
+    const catalogue = await prisma.event.findMany({
+      where: { startsAt: { gt: new Date() } },
+      include: { venue: true },
+      orderBy: { startsAt: "asc" },
+    });
+    const resolutions = suggestAlternatives(
+      { ...candidate, category: candidateEvent.imageKey },
+      existing,
+      catalogue.map(
+        (e): SuggestionCandidate => ({
+          id: e.id,
+          startsAt: e.startsAt.toISOString(),
+          endsAt: e.endsAt.toISOString(),
+          venue: { lat: e.venue.lat, lng: e.venue.lng },
+          category: e.imageKey,
+        })
+      )
+    );
+    res.status(409).json({
+      error: "This event clashes with your itinerary",
+      clash,
+      resolutions,
+    });
     return;
   }
 
@@ -65,6 +111,9 @@ router.post("/", requireAuth, async (req, res) => {
   res.status(201).json(created);
 });
 
+// DELETE /itinerary/:eventId - deleteMany (not delete) so removing
+// something already gone is a no-op rather than a 500. Scoped to
+// req.userId, so one user can never delete another's item.
 router.delete("/:eventId", requireAuth, async (req, res) => {
   await prisma.itineraryItem.deleteMany({
     where: { userId: req.userId, eventId: String(req.params.eventId) },

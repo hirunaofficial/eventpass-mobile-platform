@@ -73,3 +73,131 @@ export function findClash(
 
   return null;
 }
+
+/* ===================================================================
+   CONFLICT RESOLUTION
+   -------------------------------------------------------------------
+   `findClash` answers "is this addition legal?". That is only half a
+   constraint system: rejecting a user's choice with no way forward is
+   a dead end. These functions answer "given that it isn't legal, what
+   CAN you do?" - the repair half of the algorithm.
+
+   Framed in CSP terms: the itinerary is a partial assignment, each
+   event is a variable, and the constraints are (1) no time overlap and
+   (2) enough travel time between venues. When adding a candidate makes
+   the assignment inconsistent we offer two kinds of repair:
+
+     - SWAP       a minimal repair: drop exactly one already-assigned
+                  item so the candidate becomes consistent. Verified by
+                  re-running the full constraint check on the reduced
+                  set, because dropping the directly-overlapping item
+                  can still leave a travel-time violation with another.
+
+     - ALTERNATIVE  a different value from the domain: another event
+                  that is consistent with the itinerary as it already
+                  stands, so nothing has to be given up at all.
+
+   Both are pure and I/O-free, so the same code runs client-side for
+   instant feedback and server-side as the authoritative check.
+   =================================================================== */
+
+export interface SuggestionCandidate extends ClashCheckEvent {
+  /** Category key, used only to rank alternatives by similarity. */
+  category?: string | null;
+}
+
+export type Resolution =
+  | {
+      type: "swap";
+      /** Drop this already-added item and the candidate becomes legal. */
+      dropEventId: string;
+    }
+  | {
+      type: "alternative";
+      /** Add this instead; it clashes with nothing already scheduled. */
+      eventId: string;
+      /** True when it shares the candidate's category. */
+      sameCategory: boolean;
+    };
+
+/**
+ * Every existing item the candidate conflicts with, not just the first.
+ * `findClash` short-circuits on the first violation because that is all
+ * an accept/reject decision needs; repair needs the complete set.
+ */
+export function findAllClashes(
+  candidate: ClashCheckEvent,
+  existingItems: ClashCheckEvent[]
+): ClashReason[] {
+  const reasons: ClashReason[] = [];
+  for (const item of existingItems) {
+    const reason = findClash(candidate, [item]);
+    if (reason) reasons.push(reason);
+  }
+  return reasons;
+}
+
+/**
+ * Propose ways out of a clash, best-first.
+ *
+ * Alternatives are offered before swaps: adding something that fits
+ * costs the user nothing, whereas a swap asks them to give something
+ * up. Within alternatives, same-category events rank first (closest to
+ * what they actually wanted) and then by soonest start.
+ *
+ * Returns an empty array when the candidate does not clash at all -
+ * callers should only reach this after `findClash` returned non-null.
+ */
+export function suggestAlternatives(
+  candidate: SuggestionCandidate,
+  existingItems: ClashCheckEvent[],
+  catalogue: SuggestionCandidate[],
+  options: { limit?: number } = {}
+): Resolution[] {
+  const limit = options.limit ?? 3;
+  if (findClash(candidate, existingItems) === null) return [];
+
+  const scheduledIds = new Set(existingItems.map((i) => i.id));
+  const resolutions: Resolution[] = [];
+
+  // --- Alternatives: other events that need no sacrifice. ---------
+  const fitting = catalogue
+    .filter(
+      (e) =>
+        e.id !== candidate.id &&
+        !scheduledIds.has(e.id) &&
+        new Date(e.startsAt).getTime() > Date.now() &&
+        findClash(e, existingItems) === null
+    )
+    .map((e) => ({
+      event: e,
+      sameCategory:
+        candidate.category != null && e.category === candidate.category,
+    }))
+    .sort((a, b) => {
+      if (a.sameCategory !== b.sameCategory) return a.sameCategory ? -1 : 1;
+      return (
+        new Date(a.event.startsAt).getTime() -
+        new Date(b.event.startsAt).getTime()
+      );
+    });
+
+  for (const { event, sameCategory } of fitting) {
+    resolutions.push({ type: "alternative", eventId: event.id, sameCategory });
+    if (resolutions.length >= limit) return resolutions;
+  }
+
+  // --- Swaps: minimal repair, one dropped item at a time. ---------
+  // Only single-item drops are offered. Dropping two or more to fit one
+  // new event is a worse trade than simply not adding it, so it is not
+  // proposed even when it would technically satisfy the constraints.
+  for (const item of existingItems) {
+    const reduced = existingItems.filter((i) => i.id !== item.id);
+    if (findClash(candidate, reduced) === null) {
+      resolutions.push({ type: "swap", dropEventId: item.id });
+      if (resolutions.length >= limit) break;
+    }
+  }
+
+  return resolutions;
+}
