@@ -3,50 +3,91 @@
 @tailwind utilities;
 
 @layer base {
+  /* ===================================================================
+     NIGHT PRESS - approved 2026-10-08. Supersedes "Nocturne".
+
+     WHY THIS REPLACED NOCTURNE
+     Nocturne was violet (#7C5CFF) on blue-black (#0A0A0C), with smooth
+     violet/magenta gradients across all the category artwork. That
+     combination - purple-blue accent, cool dark base, even linear
+     gradients - is the single most recognisable signature of
+     AI-generated interface design. The app read as machine-made, which
+     is exactly the impression a graded project cannot afford.
+
+     The fix is not more polish. It is choosing an aesthetic that
+     generators do not reach for:
+
+       1. The dark is WARM, not blue. #141210 is a charcoal with a red
+          bias. Every AI dark theme is blue-black; almost none are warm.
+       2. The accent is ACID YELLOW-GREEN. High chroma, slightly
+          uncomfortable, unmistakably chosen rather than defaulted to.
+       3. Text is BONE (#F2EFE6), never pure white. Pure white on dark
+          is a generator default and glares.
+       4. NO GRADIENTS ANYWHERE. Surfaces are flat; depth comes from
+          lightness steps and hairlines. Artwork is flat two-colour with
+          halftone grain - print language, not digital fades.
+       5. ONE accent. Acid carries every primary action. Red is reserved
+          for destructive. There is no decorative second hue.
+
+     STAFF vs ATTENDEE
+     Nocturne distinguished the two modes with a second colour (amber).
+     With a single-accent rule that is no longer available, so the two
+     modes are distinguished by INVERSION instead: attendee chrome is
+     dark with acid accents, staff chrome is solid acid with dark text.
+     Louder, and it does not cost a hue.
+     =================================================================== */
+
+  /* LIGHT - bone paper. Ink does the work; acid is a highlight only,
+     because acid yellow on bone is unreadable as a fill. */
   :root {
-    /* Refined Indigo- approved 2026-08-23. White base, one accent, red
-       reserved for errors only. See decision-log.md. */
-    --background: 0 0% 100%;
-    --foreground: 240 6% 10%;
-    --card: 0 0% 98%;
-    --card-foreground: 240 6% 10%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 6% 10%;
-    --primary: 243 75% 59%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 97%;
-    --secondary-foreground: 240 6% 10%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 97%;
-    --accent-foreground: 240 6% 10%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 243 75% 59%;
+    --background: 45 32% 93%;         /* #F2EFE6 warm bone paper      */
+    --foreground: 34 16% 9%;          /* #1A1713 ink, never pure black*/
+    --card: 45 28% 89%;
+    --card-foreground: 34 16% 9%;
+    --elevated: 45 30% 96%;
+    --popover: 45 30% 96%;
+    --popover-foreground: 34 16% 9%;
+    --primary: 34 16% 9%;             /* ink fill, bone text          */
+    --primary-foreground: 45 32% 93%;
+    --secondary: 45 22% 85%;
+    --secondary-foreground: 34 16% 9%;
+    --muted: 45 22% 85%;
+    --muted-foreground: 36 10% 38%;
+    --accent: 45 22% 85%;
+    --accent-foreground: 34 16% 9%;
+    --signal: 68 70% 38%;             /* acid, darkened to read light */
+    --signal-foreground: 45 32% 93%;
+    --destructive: 11 85% 44%;
+    --destructive-foreground: 45 32% 93%;
+    --border: 42 18% 80%;
+    --input: 42 18% 80%;
+    --ring: 68 70% 38%;
     --radius: 0.5rem;
   }
 
+  /* DARK - the hero theme. */
   .dark:root {
-    --background: 240 6% 6%;
-    --foreground: 0 0% 98%;
-    --card: 240 5% 9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 6% 6%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 243 78% 66%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 4% 15%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 240 4% 15%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 63% 42%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 240 4% 15%;
-    --input: 240 4% 15%;
-    --ring: 243 78% 66%;
+    --background: 30 11% 7%;          /* #141210 WARM black           */
+    --foreground: 45 32% 93%;         /* #F2EFE6 bone, not white      */
+    --card: 34 13% 10%;               /* #1E1B17                      */
+    --card-foreground: 45 32% 93%;
+    --elevated: 30 11% 14%;           /* #282420                      */
+    --popover: 30 11% 14%;
+    --popover-foreground: 45 32% 93%;
+    --primary: 68 100% 66%;           /* #E8FF52 acid - the one accent*/
+    --primary-foreground: 30 11% 7%;  /* dark text ON acid            */
+    --secondary: 30 11% 14%;
+    --secondary-foreground: 45 32% 93%;
+    --muted: 30 11% 14%;
+    --muted-foreground: 36 8% 50%;    /* #8A8276 warm grey            */
+    --accent: 32 15% 17%;
+    --accent-foreground: 45 32% 93%;
+    --signal: 68 100% 66%;            /* same acid - no second hue    */
+    --signal-foreground: 30 11% 7%;
+    --destructive: 11 90% 56%;        /* #F4512C warm red             */
+    --destructive-foreground: 45 32% 93%;
+    --border: 32 15% 17%;             /* #322C25 hairline             */
+    --input: 32 15% 17%;
+    --ring: 68 100% 66%;
   }
 }

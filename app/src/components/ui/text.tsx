@@ -6,7 +6,7 @@ import { Platform, Text as RNText, type Role } from "react-native";
 
 const textVariants = cva(
   cn(
-    "text-foreground text-base",
+    "text-foreground font-sans text-base",
     Platform.select({
       web: "select-text",
     })
@@ -16,24 +16,26 @@ const textVariants = cva(
       variant: {
         default: "",
         h1: cn(
-          "text-center text-4xl font-extrabold tracking-tight",
+          "text-center font-display text-4xl",
           Platform.select({ web: "scroll-m-20 text-balance" })
         ),
         h2: cn(
-          "border-border border-b pb-2 text-3xl font-semibold tracking-tight",
+          "border-border font-heading border-b pb-2 text-3xl",
           Platform.select({ web: "scroll-m-20 first:mt-0" })
         ),
-        h3: cn("text-2xl font-semibold tracking-tight", Platform.select({ web: "scroll-m-20" })),
-        h4: cn("text-xl font-semibold tracking-tight", Platform.select({ web: "scroll-m-20" })),
+        h3: cn("font-heading text-2xl", Platform.select({ web: "scroll-m-20" })),
+        h4: cn("font-title text-xl", Platform.select({ web: "scroll-m-20" })),
         p: "mt-3 leading-7 sm:mt-6",
         blockquote: "mt-4 border-l-2 pl-3 italic sm:mt-6 sm:pl-6",
         code: cn(
           "bg-muted relative rounded px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold"
         ),
         lead: "text-muted-foreground text-xl",
-        large: "text-lg font-semibold",
-        small: "text-sm font-medium leading-none",
-        muted: "text-muted-foreground text-sm",
+        large: "font-title text-lg",
+        small: "font-ui text-sm leading-none",
+        muted: "text-muted-foreground font-sans text-sm",
+        // Micro-label above a heading: uppercase, wide-tracked.
+        eyebrow: "text-muted-foreground font-ui text-eyebrow uppercase",
       },
     },
     defaultVariants: {

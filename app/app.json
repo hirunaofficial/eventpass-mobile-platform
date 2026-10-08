@@ -6,7 +6,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true
     },
@@ -49,7 +49,22 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 180,
           "resizeMode": "contain",
-          "backgroundColor": "#4F46E5"
+          "backgroundColor": "#0A0A0C"
+        }
+      ],
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "EventPass lets staff pick a saved ticket QR image when a live camera scan isn't possible."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "EventPass saves your ticket QR code to your photo library.",
+          "savePhotosPermission": "EventPass saves your ticket QR code to your photo library.",
+          "isAccessMediaLocationEnabled": false
         }
       ]
     ]
