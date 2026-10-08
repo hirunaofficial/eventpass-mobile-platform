@@ -6,3 +6,9 @@ build/
 .DS_Store
 .env
 !.env.example
+
+# Human-readable credential sheet - never commit this.
+passwords.md
+
+# Internal planning scratch - not part of the submission.
+docs/superpowers/

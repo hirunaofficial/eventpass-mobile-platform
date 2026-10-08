@@ -63,3 +63,46 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
 
   return initPromise;
 }
+
+/**
+ * Serializes write transactions against the single shared connection.
+ *
+ * `getDb()` deliberately hands every caller the SAME `SQLiteDatabase`
+ * instance, and SQLite allows only one transaction per connection. The
+ * three data hooks (`use-events`/`use-itinerary`/`use-tickets`) all
+ * mount at once and each cache their fetch, so their
+ * `withTransactionAsync` calls interleaved on that one connection and
+ * tore each other's transactions apart:
+ *
+ *   hook A: BEGIN ................... COMMIT
+ *   hook B:     BEGIN  -> "cannot start a transaction within a transaction"
+ *               ROLLBACK -> "cannot rollback - no transaction is active"
+ *
+ * Both errors were observed together, alternating, on a real device.
+ * The caching writes silently failed, which quietly disabled the
+ * offline cache- the feature the local database exists for.
+ *
+ * The fix is a promise-chain mutex: each call waits for the previous
+ * one to settle before opening its own transaction. `.catch(() => {})`
+ * on the tail is important- without it one failed write would poison
+ * the chain and every later write would reject.
+ *
+ * This is the same class of bug, and the same shape of fix, as the
+ * in-flight locks already in `getDb()` above and in `drainSyncQueue()`:
+ * a shared async resource with several independent callers on mount.
+ *
+ * `withExclusiveTransactionAsync` was considered instead- it opens a
+ * second connection per transaction, which avoids the nesting but
+ * trades it for lock contention between connections on the same file
+ * (SQLITE_BUSY). Serializing on one connection avoids both.
+ */
+let writeChain: Promise<unknown> = Promise.resolve();
+
+export function runInTransaction(task: () => Promise<void>): Promise<void> {
+  const run = writeChain.then(async () => {
+    const db = await getDb();
+    await db.withTransactionAsync(task);
+  });
+  writeChain = run.catch(() => {});
+  return run;
+}

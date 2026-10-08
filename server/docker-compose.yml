@@ -1,13 +1,25 @@
+# Credentials are read from `.env` in this directory (gitignored).
+# `.env.example` documents every variable; copy it to `.env` and fill in.
+#
+# Compose resolves ${VAR} from that file automatically because it sits
+# beside this compose file. The `:?` suffix makes a missing value a hard
+# error rather than silently starting Postgres with an empty password.
+
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: eventpass
-      POSTGRES_PASSWORD: eventpass
-      POSTGRES_DB: eventpass
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in server/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in server/.env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in server/.env}
     ports:
-      - "5432:5432"
+      # Host-side 5433, not 5432- another project's Postgres container
+      # (olee-ol05-api-postgres-1) already holds 5432 on this machine.
+      # Internal container port stays 5432 (unaffected by the host
+      # remap), so DATABASE_URL in .env is the only other place this
+      # needs to match.
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
     volumes:
       - eventpass_pgdata:/var/lib/postgresql/data
 
@@ -15,10 +27,10 @@ services:
     image: dpage/pgadmin4
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: eventpass
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:?set PGADMIN_EMAIL in server/.env}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?set PGADMIN_PASSWORD in server/.env}
     ports:
-      - "5050:80"
+      - "${PGADMIN_HOST_PORT:-5050}:80"
     depends_on:
       - postgres
 

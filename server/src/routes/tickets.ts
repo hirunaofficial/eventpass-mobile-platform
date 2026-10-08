@@ -16,6 +16,8 @@ router.get("/", requireAuth, async (req, res) => {
 
 const purchaseSchema = z.object({ eventId: z.string() });
 
+// POST /tickets - buy a ticket (mock payment; capacity is the real
+// constraint). Attendee-accessible: requireAuth only.
 router.post("/", requireAuth, async (req, res) => {
   const parsed = purchaseSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -61,6 +63,8 @@ router.get("/:id/qr", requireAuth, async (req, res) => {
 
 const checkInSchema = z.object({ qrToken: z.string() });
 
+// POST /tickets/check-in - door scan. requireStaff is chained after
+// requireAuth, so an attendee gets 403 even with a valid session.
 router.post("/check-in", requireAuth, requireStaff, async (req, res) => {
   const parsed = checkInSchema.safeParse(req.body);
   if (!parsed.success) {

@@ -1,11 +1,25 @@
+/**
+ * Offline read cache. Each table holds the last successfully-fetched
+ * server response as JSON blobs - deliberately not normalised into
+ * columns, because the cache's only job is "show what we last knew",
+ * not to be queried relationally.
+ *
+ * Every writer goes through runInTransaction() rather than calling
+ * db.withTransactionAsync directly: the three data hooks mount at the
+ * same time and share one SQLite connection, which allows only one
+ * transaction at a time. See db.ts for the full story.
+ */
 import type { EventWithVenue, TicketWithEvent } from "@eventpass/shared";
-import { getDb } from "@/lib/db";
+import { getDb, runInTransaction } from "@/lib/db";
 import type { ItineraryItemWithEvent } from "@/lib/use-itinerary";
 
+// Replace-all rather than upsert: the server response IS the truth, so
+// a delete + insert inside one transaction keeps the cache exactly in
+// step and removes anything deleted server-side.
 export async function cacheEvents(events: EventWithVenue[]): Promise<void> {
   const db = await getDb();
   const now = Date.now();
-  await db.withTransactionAsync(async () => {
+  await runInTransaction(async () => {
     await db.runAsync("DELETE FROM events_cache");
     for (const event of events) {
       await db.runAsync(
@@ -18,6 +32,7 @@ export async function cacheEvents(events: EventWithVenue[]): Promise<void> {
   });
 }
 
+/** Read path used when the network fetch fails. */
 export async function getCachedEvents(): Promise<EventWithVenue[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ data: string }>(
@@ -29,7 +44,7 @@ export async function getCachedEvents(): Promise<EventWithVenue[]> {
 export async function cacheItinerary(items: ItineraryItemWithEvent[]): Promise<void> {
   const db = await getDb();
   const now = Date.now();
-  await db.withTransactionAsync(async () => {
+  await runInTransaction(async () => {
     await db.runAsync("DELETE FROM itinerary_cache");
     for (const item of items) {
       await db.runAsync(
@@ -54,7 +69,7 @@ export async function getCachedItinerary(): Promise<ItineraryItemWithEvent[]> {
 export async function cacheTickets(tickets: TicketWithEvent[]): Promise<void> {
   const db = await getDb();
   const now = Date.now();
-  await db.withTransactionAsync(async () => {
+  await runInTransaction(async () => {
     await db.runAsync("DELETE FROM tickets_cache");
     for (const ticket of tickets) {
       await db.runAsync(

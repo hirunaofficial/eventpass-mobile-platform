@@ -3,8 +3,14 @@ import bcrypt from "bcrypt";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 
+// Demo-account credentials come from `.env` (gitignored), with fallbacks
+// so a fresh clone still seeds and runs without any setup. The real
+// passwords for THIS machine live in the repo-root `passwords.md`, which
+// is also gitignored.
 const STAFF_EMAIL = "staff@eventpass.dev";
-const STAFF_PASSWORD = "staffpass123";
+const STAFF_PASSWORD = process.env.STAFF_PASSWORD ?? "staffpass123";
+const DEMO_EMAIL = "demo@eventpass.dev";
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "demopass123";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -26,11 +32,26 @@ async function main() {
   // real attendee accounts created via signup along the way.
   await prisma.user.upsert({
     where: { email: STAFF_EMAIL },
-    update: { role: "staff" },
+    // The hash is refreshed on update too, so rotating STAFF_PASSWORD in
+    // .env and reseeding actually changes the login- an update that only
+    // set `role` would silently keep the old password.
+    update: { role: "staff", passwordHash: await bcrypt.hash(STAFF_PASSWORD, 10) },
     create: {
       email: STAFF_EMAIL,
       passwordHash: await bcrypt.hash(STAFF_PASSWORD, 10),
       role: "staff",
+    },
+  });
+
+  // A ready-made attendee, so the demo does not have to start with a
+  // signup flow every time the database is reset.
+  await prisma.user.upsert({
+    where: { email: DEMO_EMAIL },
+    update: { role: "attendee", passwordHash: await bcrypt.hash(DEMO_PASSWORD, 10) },
+    create: {
+      email: DEMO_EMAIL,
+      passwordHash: await bcrypt.hash(DEMO_PASSWORD, 10),
+      role: "attendee",
     },
   });
 
@@ -76,6 +97,19 @@ async function main() {
       address: "Reid Ave, Colombo 07",
       lat: 6.9058,
       lng: 79.8654,
+    },
+  });
+
+  // ~7km south of the Colombo 07 cluster. Every other venue is within
+  // ~2km of the others, which at the solver's assumed 30km/h is only a
+  // few minutes of travel- too short for a travel-time clash to ever
+  // trigger. This venue exists so that constraint is demonstrable.
+  const mountLaviniaBeach = await prisma.venue.create({
+    data: {
+      name: "Mount Lavinia Beach Stage",
+      address: "Hotel Rd, Mount Lavinia",
+      lat: 6.8389,
+      lng: 79.8653,
     },
   });
 
@@ -226,11 +260,49 @@ async function main() {
         remaining: 233,
         imageKey: "classical",
       },
+      // ---------------------------------------------------------------
+      // The two events below exist specifically to make the constraint
+      // algorithm demonstrable. Without them NO pair of seeded events
+      // clashes (verified: 0 of 66 pairs), so the app's core feature
+      // could never be shown in a demo or viva.
+      //
+      // Both are scheduled against "Colombo Tech Meetup" (now+5h -> +7h),
+      // one per constraint:
+      // ---------------------------------------------------------------
+      {
+        // CONSTRAINT 1- TIME OVERLAP. Runs 6h-8h30 against the meetup's
+        // 5h-7h, so the intervals genuinely intersect.
+        title: "Indie Film Double Bill",
+        description:
+          "Two independent features back to back with a short director Q&A in between, screened from 35mm in the gallery's upstairs room. Seating is unreserved and the room is small, so arrive early if you want a good view of the screen.",
+        venueId: lionelWendt.id,
+        startsAt: new Date(now + 6 * hour),
+        endsAt: new Date(now + 8 * hour + 30 * 60 * 1000),
+        capacity: 80,
+        remaining: 31,
+        imageKey: "film",
+      },
+      {
+        // CONSTRAINT 2- INSUFFICIENT TRAVEL TIME. Starts 10 minutes
+        // after the meetup ends, but Mount Lavinia is ~7km from
+        // Independence Arcade: ~14 min at 30km/h. No time overlap at
+        // all, so this isolates the travel-buffer rule cleanly.
+        title: "Sunset Beach Session",
+        description:
+          "An open-air DJ set on the sand as the sun goes down, running into the evening with food trucks along the back of the beach. Barefoot encouraged; the stage is a short walk from the railway station.",
+        venueId: mountLaviniaBeach.id,
+        startsAt: new Date(now + 7 * hour + 10 * 60 * 1000),
+        endsAt: new Date(now + 10 * hour),
+        capacity: 300,
+        remaining: 118,
+        imageKey: "music",
+      },
     ],
   });
 
-  console.log("Seeded 6 venues and 12 events.");
-  console.log(`Staff login: ${STAFF_EMAIL} / ${STAFF_PASSWORD}`);
+  console.log("Seeded 7 venues and 14 events.");
+  console.log(`Staff login:    ${STAFF_EMAIL} / ${STAFF_PASSWORD}`);
+  console.log(`Attendee login: ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
 }
 
 main()

@@ -1,3 +1,12 @@
+/**
+ * Accelerometer "shake to refresh" (hardware integration #3).
+ *
+ * Shake detection is just a magnitude threshold on the raw accelerometer
+ * vector: at rest the reading is ~1g, so anything well above that is
+ * deliberate movement. The debounce matters - one physical shake spans
+ * many sensor samples, and without it a single gesture would fire the
+ * callback dozens of times.
+ */
 import { useEffect, useRef } from "react";
 import { Accelerometer } from "expo-sensors";
 

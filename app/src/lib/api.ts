@@ -1,4 +1,37 @@
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import Constants from "expo-constants";
+
+/**
+ * Resolves the API base URL.
+ *
+ * A hard-coded LAN IP in `.env` is fragile: DHCP reassigns it (it changed
+ * twice in one afternoon on this machine), and the address at a demo or
+ * viva on a different network will certainly not be the one baked in at
+ * home. Because `EXPO_PUBLIC_*` values are inlined at BUILD time, a stale
+ * one cannot be fixed by reloading - it needs a Metro restart - and the
+ * only symptom is every request failing to connect, which reads like a
+ * server or database problem rather than a wrong address.
+ *
+ * So the dev host is derived from Expo itself. `hostUri` is whatever
+ * address this app was actually served from, which is by definition
+ * reachable from this device - if Metro loaded, the API host is correct.
+ *
+ * Precedence:
+ *   1. EXPO_PUBLIC_API_URL, when set - an explicit override always wins,
+ *      and is what a real deployment would use.
+ *   2. Expo's own host, with the API port substituted - the dev default.
+ */
+function resolveApiUrl(): string | undefined {
+  const explicit = process.env.EXPO_PUBLIC_API_URL;
+  if (explicit) return explicit;
+
+  const hostUri = Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost;
+  const host = hostUri?.split(":")[0];
+  if (host) return `http://${host}:4000`;
+
+  return undefined;
+}
+
+const API_URL = resolveApiUrl();
 
 export class ApiError extends Error {
   status: number;
