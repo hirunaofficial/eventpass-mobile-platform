@@ -1,36 +1,18 @@
-import { Compass, ListChecks, Ticket } from "lucide-react-native";
 import { Tabs } from "expo-router";
+import { FloatingTabBar } from "@/components/floating-tab-bar";
 
 export default function TabsLayout() {
   return (
     <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: "#4F46E5",
-        tabBarInactiveTintColor: "#9CA3AF",
-      }}
+      // The stock bar is replaced wholesale by a hand-built one- see
+      // components/floating-tab-bar.tsx for why.
+      tabBar={(props) => <FloatingTabBar {...props} />}
+      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: "transparent" } }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Discover",
-          tabBarIcon: ({ color, size }) => <Compass color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="itinerary"
-        options={{
-          title: "Itinerary",
-          tabBarIcon: ({ color, size }) => <ListChecks color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="tickets"
-        options={{
-          title: "Tickets",
-          tabBarIcon: ({ color, size }) => <Ticket color={color} size={size} />,
-        }}
-      />
+      <Tabs.Screen name="index" options={{ title: "Discover" }} />
+      <Tabs.Screen name="itinerary" options={{ title: "Plan" }} />
+      <Tabs.Screen name="tickets" options={{ title: "Tickets" }} />
+      <Tabs.Screen name="profile" options={{ title: "You" }} />
     </Tabs>
   );
 }

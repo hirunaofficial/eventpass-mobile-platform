@@ -95,7 +95,14 @@ export function ItineraryTimeline({
   let lastDay: string | null = null;
 
   return (
-    <ScrollView className="flex-1" showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
+    <ScrollView
+      className="flex-1"
+      showsVerticalScrollIndicator={false}
+      refreshControl={refreshControl}
+      // Clearance for the floating tab bar, which overlays content
+      // rather than reserving layout space of its own.
+      contentContainerStyle={{ paddingBottom: 110 }}
+    >
       {sorted.map((item, index) => {
         const isClashing = clashingIds.has(item.id);
         const day = formatDay(item.startsAt);
@@ -125,9 +132,7 @@ export function ItineraryTimeline({
             {showDayDivider ? (
               <View className="mb-2 mt-4 flex-row items-center gap-2">
                 <View className="bg-border h-px flex-1" />
-                <Text variant="small" className="text-muted-foreground">
-                  {day}
-                </Text>
+                <Text variant="eyebrow">{day}</Text>
                 <View className="bg-border h-px flex-1" />
               </View>
             ) : null}
@@ -150,23 +155,23 @@ export function ItineraryTimeline({
               className="flex-row"
               style={{ minHeight: blockHeight }}
             >
-              <View className="w-16 items-end pr-2 pt-1">
-                <Text variant="small" className="text-muted-foreground">
+              <View className="w-16 items-end pr-2 pt-1.5">
+                <Text className="text-muted-foreground font-ui text-sm">
                   {formatTime(item.startsAt)}
                 </Text>
               </View>
 
               <View className="relative ml-2 flex-1 flex-row">
-                <View className={isClashing ? "bg-destructive w-1 rounded-full" : "bg-primary w-1 rounded-full"} />
+                <View className={isClashing ? "bg-destructive w-[3px] rounded-full" : "bg-primary/60 w-[3px] rounded-full"} />
                 <View
                   className={
                     isClashing
-                      ? "border-destructive bg-destructive/10 ml-3 flex-1 justify-center rounded-md border p-3"
-                      : "border-border bg-card ml-3 flex-1 justify-center rounded-md border p-3"
+                      ? "border-destructive/60 bg-destructive/10 ml-3 flex-1 justify-center rounded-xl border p-3.5"
+                      : "border-border bg-card ml-3 flex-1 justify-center rounded-xl border p-3.5"
                   }
                 >
                   <View className="flex-row items-center justify-between">
-                    <Text variant="large" numberOfLines={1} className="flex-1">
+                    <Text numberOfLines={1} className="font-title flex-1 text-base">
                       {item.title}
                     </Text>
                     {isClashing ? (

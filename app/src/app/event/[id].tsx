@@ -1,8 +1,16 @@
+/**
+ * Event detail screen.
+ *
+ * Reads the event out of the ALREADY-FETCHED list from useEvents()
+ * rather than fetching by id. That means it works offline for free (the
+ * list is cached) and costs no extra request. Trade-off: deep-linking
+ * straight here before the list loads shows the not-found state.
+ */
 import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { MapPin, TicketIcon, Users } from "lucide-react-native";
-import { ScrollView, View } from "react-native";
-import type { ClashReason } from "@eventpass/shared";
+import { ArrowLeft, CalendarClock, MapPin, TicketIcon, Users } from "lucide-react-native";
+import { Pressable, ScrollView, View } from "react-native";
+import type { ClashReason, Resolution } from "@eventpass/shared";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,12 +19,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
+import { ClashResolutionSheet } from "@/components/clash-resolution-sheet";
 import { EventImage } from "@/components/event-image";
 import { useEvents } from "@/lib/use-events";
 import { useItinerary } from "@/lib/use-itinerary";
@@ -36,32 +44,50 @@ function formatEndTime(iso: string) {
   return new Date(iso).toLocaleString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
-function clashMessage(reason: ClashReason): string {
-  if (reason.type === "time_overlap") {
-    return "This event overlaps with something already in your itinerary.";
-  }
-  return `You'd only have ${reason.availableMinutes} min to travel between venues, but need about ${reason.neededMinutes} min.`;
+function BackButton() {
+  return (
+    <Pressable
+      onPress={() => router.back()}
+      accessibilityRole="button"
+      accessibilityLabel="Go back"
+      className="border-border bg-card/90 h-10 w-10 items-center justify-center rounded-full border"
+    >
+      <Icon as={ArrowLeft} size={18} className="text-foreground" />
+    </Pressable>
+  );
 }
 
 export default function EventDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { events, isLoading } = useEvents();
-  const { addToItinerary } = useItinerary();
+  const { addToItinerary, removeFromItinerary } = useItinerary();
   const { purchaseTicket } = useTickets();
 
-  const [clashInfo, setClashInfo] = useState<ClashReason | null>(null);
+  const [clash, setClash] = useState<{ reason: ClashReason; resolutions: Resolution[] } | null>(
+    null
+  );
   const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
 
   const event = events.find((item) => item.id === id);
 
+  // Passing the whole catalogue lets the constraint solver propose real
+  // alternatives on rejection instead of just saying no.
   async function handleAdd() {
     if (!event) return;
-    const result = await addToItinerary(event);
+    const result = await addToItinerary(event, events);
     if (!result.ok) {
-      setClashInfo(result.reason);
+      setClash({ reason: result.reason, resolutions: result.resolutions });
     } else {
-      setNotice({ title: "Added", message: "This event was added to your itinerary." });
+      setNotice({ title: "Added to your plan", message: `${event.title} is now in your itinerary.` });
     }
+  }
+
+  // "Make room for it": drop the blocking item, then retry the add.
+  async function handleSwap(dropEventId: string) {
+    setClash(null);
+    if (!event) return;
+    await removeFromItinerary(dropEventId);
+    await addToItinerary(event, events);
   }
 
   async function handleBuy() {
@@ -72,7 +98,8 @@ export default function EventDetailsScreen() {
     } else if (result.queued) {
       setNotice({
         title: "Purchase queued",
-        message: "You're offline- this ticket will be purchased automatically once you're back online.",
+        message:
+          "You're offline- this ticket will be purchased automatically once you're back online.",
       });
     } else {
       setNotice({ title: "Ticket purchased", message: "Find your QR code under the Tickets tab." });
@@ -82,15 +109,13 @@ export default function EventDetailsScreen() {
   if (isLoading && !event) {
     return (
       <View className="bg-background flex-1">
-        <View className="border-border border-b px-4 pb-3 pt-16">
-          <Button variant="ghost" size="sm" className="self-start" onPress={() => router.back()}>
-            <Text>Back</Text>
-          </Button>
+        <View className="px-5 pt-16">
+          <BackButton />
         </View>
-        <View className="gap-3 p-4">
-          <Skeleton className="h-6 w-3/4 rounded" />
+        <View className="gap-3 p-5">
+          <Skeleton className="h-52 w-full rounded-card" />
+          <Skeleton className="h-7 w-3/4 rounded" />
           <Skeleton className="h-4 w-1/2 rounded" />
-          <Skeleton className="h-32 w-full rounded" />
         </View>
       </View>
     );
@@ -99,91 +124,111 @@ export default function EventDetailsScreen() {
   if (!event) {
     return (
       <View className="bg-background flex-1 items-center justify-center gap-4 p-6">
-        <Text variant="large" className="text-center">
-          This event couldn't be found.
-        </Text>
-        <Button onPress={() => router.back()}>
+        <Text className="font-title text-center text-lg">This event couldn't be found.</Text>
+        <Button className="rounded-full" onPress={() => router.back()}>
           <Text>Back</Text>
         </Button>
       </View>
     );
   }
 
+  // `remaining` is server-authoritative; a cached value can be stale,
+  // which is why buying is never applied optimistically offline.
+  const claimed = event.capacity - event.remaining;
+  const soldOut = event.remaining <= 0;
+
   return (
     <View className="bg-background flex-1">
-      <View className="border-border border-b px-4 pb-3 pt-16">
-        <Button variant="ghost" size="sm" className="self-start" onPress={() => router.back()}>
-          <Text>Back</Text>
-        </Button>
-      </View>
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 40 }}>
+        <View className="h-72 w-full">
+          <EventImage imageKey={event.imageKey} className="h-full w-full" iconSize={56} />
+          <View className="absolute left-5 top-16">
+            <BackButton />
+          </View>
+        </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
-        <EventImage imageKey={event.imageKey} className="h-56 w-full" iconSize={48} />
-
-        <View className="p-4">
-          <Text variant="h3">{event.title}</Text>
-
-          <View className="mt-3 flex-row flex-wrap gap-2">
-            <Badge variant="secondary">
-              <Text variant="small">
-                {formatDateTime(event.startsAt)} – {formatEndTime(event.endsAt)}
-              </Text>
-            </Badge>
-            <Badge variant="outline">
-              <Icon as={TicketIcon} size={10} className="text-foreground" />
-              <Text variant="small">{event.remaining} left</Text>
-            </Badge>
+        {/* Pulled up over the artwork so the sheet reads as a layer above
+            it rather than a seam between two blocks. */}
+        <View className="bg-background rounded-t-card -mt-6 gap-5 px-5 pt-6">
+          <View className="gap-2">
+            <Text variant="eyebrow">{event.imageKey ?? "Event"}</Text>
+            <Text className="font-display text-3xl">{event.title}</Text>
           </View>
 
-          <View className="mt-4 flex-row items-start gap-2">
-            <Icon as={MapPin} size={16} className="text-muted-foreground mt-0.5" />
-            <View className="flex-1">
-              <Text variant="large">{event.venue.name}</Text>
-              <Text variant="muted">{event.venue.address}</Text>
+          <View className="border-border bg-card rounded-card gap-4 border p-4">
+            <View className="flex-row items-start gap-3">
+              <Icon as={CalendarClock} size={16} className="text-primary mt-0.5" />
+              <View className="flex-1">
+                <Text className="font-title text-base">
+                  {formatDateTime(event.startsAt)}
+                </Text>
+                <Text variant="muted">Ends {formatEndTime(event.endsAt)}</Text>
+              </View>
+            </View>
+
+            <View className="bg-border h-px" />
+
+            <View className="flex-row items-start gap-3">
+              <Icon as={MapPin} size={16} className="text-primary mt-0.5" />
+              <View className="flex-1">
+                <Text className="font-title text-base">{event.venue.name}</Text>
+                <Text variant="muted">{event.venue.address}</Text>
+              </View>
             </View>
           </View>
 
-          <View className="mt-4 gap-1.5">
+          <View className="gap-2">
             <View className="flex-row items-center justify-between">
               <View className="flex-row items-center gap-2">
-                <Icon as={Users} size={16} className="text-muted-foreground" />
+                <Icon as={Users} size={14} className="text-muted-foreground" />
                 <Text variant="muted">
-                  {event.capacity - event.remaining} of {event.capacity} tickets claimed
+                  {claimed} of {event.capacity} claimed
                 </Text>
               </View>
-              <Text variant="small" className="text-muted-foreground">
-                {event.remaining} left
+              <Text className={soldOut ? "text-destructive font-ui text-sm" : "font-ui text-sm"}>
+                {soldOut ? "Sold out" : `${event.remaining} left`}
               </Text>
             </View>
-            <Progress value={((event.capacity - event.remaining) / event.capacity) * 100} />
+            <Progress value={(claimed / event.capacity) * 100} />
           </View>
 
-          <Text variant="muted" className="mt-4">
-            {event.description}
-          </Text>
+          <View className="gap-2">
+            <Text variant="eyebrow">About</Text>
+            <Text variant="muted" className="leading-6">
+              {event.description}
+            </Text>
+          </View>
 
-          <View className="mt-6 flex-row gap-2">
-            <Button variant="outline" className="flex-1" onPress={handleBuy}>
-              <Text>Buy ticket</Text>
+          <View className="mt-2 flex-row gap-3">
+            <Button
+              variant="outline"
+              className="flex-1 rounded-full"
+              disabled={soldOut}
+              onPress={handleBuy}
+            >
+              <Icon as={TicketIcon} size={15} />
+              <Text>{soldOut ? "Sold out" : "Buy ticket"}</Text>
             </Button>
-            <Button className="flex-1" onPress={handleAdd}>
-              <Text>Add to itinerary</Text>
+            <Button className="flex-1 rounded-full" onPress={handleAdd}>
+              <Text>Add to plan</Text>
             </Button>
           </View>
         </View>
       </ScrollView>
 
-      <AlertDialog open={clashInfo !== null} onOpenChange={(open) => !open && setClashInfo(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Can't add this event</AlertDialogTitle>
-            <AlertDialogDescription>{clashInfo ? clashMessage(clashInfo) : ""}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogAction onPress={() => setClashInfo(null)}>
-            <Text>OK</Text>
-          </AlertDialogAction>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ClashResolutionSheet
+        candidate={clash ? event : null}
+        reason={clash?.reason ?? null}
+        resolutions={clash?.resolutions ?? []}
+        events={events}
+        onChooseAlternative={(alternative) => {
+          setClash(null);
+          router.replace(`/event/${alternative.id}`);
+        }}
+        onChooseSwap={handleSwap}
+        onDismiss={() => setClash(null)}
+      />
 
       <AlertDialog open={notice !== null} onOpenChange={(open) => !open && setNotice(null)}>
         <AlertDialogContent>

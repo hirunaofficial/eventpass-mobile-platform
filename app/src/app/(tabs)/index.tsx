@@ -1,22 +1,31 @@
+/**
+ * Discover - the app's home screen.
+ *
+ * Composes five hooks, each owning one concern:
+ *   useEvents    - catalogue + offline cache
+ *   useItinerary - add, and the constraint check on add
+ *   useTickets   - purchase
+ *   useLocation  - GPS, for distance sorting
+ *   useShake     - accelerometer, shake to refresh
+ *
+ * The screen itself holds only view state (search text, category, which
+ * dialog is open). All data and business logic lives in the hooks -
+ * this is the Presentation layer talking to ViewModels.
+ */
 import { useMemo, useState } from "react";
 import { router } from "expo-router";
-import { CloudOff, LogOut, MapPin, TicketIcon } from "lucide-react-native";
-import { FlatList, Pressable, RefreshControl, View } from "react-native";
-import { haversineDistanceKm, type ClashReason, type EventWithVenue } from "@eventpass/shared";
+import { CloudOff, MapPin, Search, TicketIcon } from "lucide-react-native";
+import { Sparkle } from "phosphor-react-native";
+import { Pressable, RefreshControl, ScrollView, View } from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
+import { haversineDistanceKm, type ClashReason, type EventWithVenue, type Resolution } from "@eventpass/shared";
+import { ClashResolutionSheet } from "@/components/clash-resolution-sheet";
 import { EventImage } from "@/components/event-image";
-
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
+import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
+import { PhosphorIcon } from "@/components/ui/phosphor-icon";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useAuth } from "@/lib/auth-context";
@@ -26,6 +35,22 @@ import { useLocation } from "@/lib/use-location";
 import { useShake } from "@/lib/use-shake";
 import { useTickets } from "@/lib/use-tickets";
 
+/** Space the floating tab bar needs so the last card isn't trapped under it. */
+const TAB_BAR_CLEARANCE = 110;
+
+/**
+ * Deliberately not "Good morning/afternoon/evening". A time-of-day
+ * greeting is filler- it says nothing the user does not already know.
+ * This states what is actually true of the list below it.
+ */
+function headline(count: number): { kicker: string; title: string } {
+  const hour = new Date().getHours();
+  if (count === 0) return { kicker: "Nothing on", title: "Quiet right now" };
+  if (hour >= 17) return { kicker: "Doors open soon", title: "Out tonight" };
+  if (hour < 12) return { kicker: "Planning ahead", title: "What's coming up" };
+  return { kicker: "Still time to decide", title: "On later today" };
+}
+
 function formatEventTime(startsAt: string) {
   return new Date(startsAt).toLocaleString(undefined, {
     weekday: "short",
@@ -34,91 +59,121 @@ function formatEventTime(startsAt: string) {
   });
 }
 
+function sectionFor(startsAt: string): "Tonight" | "This week" | "Later" {
+  const now = new Date();
+  const start = new Date(startsAt);
+  if (start.toDateString() === now.toDateString()) return "Tonight";
+  const diffDays = (start.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+  return diffDays < 7 ? "This week" : "Later";
+}
+
+function FeaturedCard({ event, onPress }: { event: EventWithVenue; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} className="border-border bg-card rounded-card overflow-hidden border">
+      <View className="h-52 w-full">
+        <EventImage imageKey={event.imageKey} className="h-full w-full" iconSize={48} />
+      </View>
+      <View className="gap-2 p-4">
+        <View className="flex-row items-center gap-1.5">
+          <PhosphorIcon as={Sparkle} size={13} weight="fill" className="text-primary" />
+          <Text className="text-primary font-ui text-eyebrow uppercase">Featured tonight</Text>
+        </View>
+        <Text numberOfLines={2} className="font-display text-2xl">
+          {event.title}
+        </Text>
+        <View className="flex-row items-center gap-1.5">
+          <Icon as={MapPin} size={12} className="text-muted-foreground" />
+          <Text variant="muted" numberOfLines={1}>
+            {event.venue.name} · {formatEventTime(event.startsAt)}
+          </Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
 function EventCard({
   event,
   distanceKm,
+  index,
   onAdd,
   onBuy,
+  onOpen,
 }: {
   event: EventWithVenue;
   distanceKm: number | null;
-  onAdd: (event: EventWithVenue) => void;
-  onBuy: (event: EventWithVenue) => void;
+  index: number;
+  onAdd: () => void;
+  onBuy: () => void;
+  onOpen: () => void;
 }) {
+  const soldOut = event.remaining <= 0;
+
   return (
-    <Card className="mb-3 overflow-hidden">
-      <Pressable onPress={() => router.push(`/event/${event.id}`)}>
-        <EventImage imageKey={event.imageKey} className="h-40 w-full" iconSize={36} />
-        <CardHeader>
-          <Text variant="large">{event.title}</Text>
-          <View className="flex-row items-center gap-1">
-            <Icon as={MapPin} size={12} className="text-muted-foreground" />
-            <Text variant="muted">
-              {event.venue.name}
-              {distanceKm !== null ? ` · ${distanceKm.toFixed(1)} km away` : ""}
+    <Animated.View entering={FadeInDown.delay(Math.min(index, 6) * 50).duration(320)}>
+      <Pressable
+        onPress={onOpen}
+        className="border-border bg-card rounded-card flex-row gap-3 border p-3"
+      >
+        {/* Inner core: its own surface + radius inside the card shell. */}
+        <View className="bg-elevated h-24 w-24 overflow-hidden rounded-xl">
+          <EventImage imageKey={event.imageKey} className="h-full w-full" iconSize={26} />
+        </View>
+
+        <View className="flex-1 justify-between gap-2">
+          <View className="gap-1">
+            <Text numberOfLines={2} className="font-title text-base">
+              {event.title}
             </Text>
+            <View className="flex-row items-center gap-1">
+              <Icon as={MapPin} size={11} className="text-muted-foreground" />
+              <Text variant="muted" numberOfLines={1} className="flex-1">
+                {event.venue.name}
+                {distanceKm != null ? ` · ${distanceKm.toFixed(1)} km` : ""}
+              </Text>
+            </View>
+            <Text variant="muted">{formatEventTime(event.startsAt)}</Text>
           </View>
-        </CardHeader>
-        <CardContent className="gap-3">
-          <Text variant="muted" numberOfLines={2}>
-            {event.description}
-          </Text>
-          <View className="flex-row gap-2">
-            <Badge variant="secondary">
-              <Text variant="small">{formatEventTime(event.startsAt)}</Text>
-            </Badge>
-            <Badge variant="outline">
-              <Icon as={TicketIcon} size={10} className="text-foreground" />
-              <Text variant="small">{event.remaining} left</Text>
-            </Badge>
+
+          <View className="flex-row items-center gap-2">
+            <Button size="sm" className="flex-1 rounded-full" onPress={onAdd}>
+              <Text>Add to plan</Text>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-full"
+              disabled={soldOut}
+              onPress={onBuy}
+            >
+              <Icon as={TicketIcon} size={14} />
+              <Text>{soldOut ? "Sold out" : "Ticket"}</Text>
+            </Button>
           </View>
-        </CardContent>
+        </View>
       </Pressable>
-      <CardFooter className="justify-end gap-2">
-        <Button variant="outline" size="sm" onPress={() => onBuy(event)}>
-          <Text>Buy ticket</Text>
-        </Button>
-        <Button size="sm" onPress={() => onAdd(event)}>
-          <Text>Add to itinerary</Text>
-        </Button>
-      </CardFooter>
-    </Card>
+    </Animated.View>
   );
 }
 
+// Skeleton mirrors the real card's layout exactly, so finishing a load
+// causes no visible jump.
 function EventCardSkeleton() {
   return (
-    <Card className="mb-3 overflow-hidden">
-      <Skeleton className="h-40 w-full rounded-none" />
-      <CardHeader className="gap-2">
+    <View className="border-border bg-card rounded-card flex-row gap-3 border p-3">
+      <Skeleton className="h-24 w-24 rounded-xl" />
+      <View className="flex-1 gap-2">
         <Skeleton className="h-4 w-3/4 rounded" />
         <Skeleton className="h-3 w-1/2 rounded" />
-      </CardHeader>
-      <CardContent className="gap-3">
-        <Skeleton className="h-3 w-full rounded" />
-        <View className="flex-row gap-2">
-          <Skeleton className="h-5 w-20 rounded-full" />
-          <Skeleton className="h-5 w-16 rounded-full" />
-        </View>
-      </CardContent>
-    </Card>
+        <Skeleton className="h-3 w-1/3 rounded" />
+        <Skeleton className="mt-2 h-8 w-full rounded-full" />
+      </View>
+    </View>
   );
 }
 
-const CATEGORIES: { key: string; label: string }[] = [
-  { key: "tech", label: "Tech" },
-  { key: "music", label: "Music" },
-  { key: "art", label: "Art" },
-  { key: "business", label: "Business" },
-  { key: "comedy", label: "Comedy" },
-  { key: "wellness", label: "Wellness" },
-  { key: "film", label: "Film" },
-  { key: "sports", label: "Sports" },
-  { key: "food", label: "Food" },
-  { key: "workshop", label: "Workshop" },
-  { key: "classical", label: "Classical" },
-];
-
+// Only renders categories actually present in the current results, so
+// there are never chips that would return nothing.
 function CategoryFilterBar({
   events,
   selected,
@@ -128,65 +183,107 @@ function CategoryFilterBar({
   selected: string | null;
   onSelect: (key: string | null) => void;
 }) {
-  const present = new Set(events.map((e) => e.imageKey).filter((k): k is string => !!k));
-  const options = CATEGORIES.filter((c) => present.has(c.key));
+  const options = useMemo(() => {
+    const keys = Array.from(
+      new Set(events.map((e) => e.imageKey).filter((k): k is string => !!k))
+    ).sort();
+    return keys.map((key) => ({ key, label: key[0]!.toUpperCase() + key.slice(1) }));
+  }, [events]);
 
   if (options.length < 2) return null;
 
   return (
-    <FlatList
-      horizontal
-      data={[{ key: null, label: "All" }, ...options]}
-      keyExtractor={(item) => item.key ?? "all"}
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
-      renderItem={({ item }) => (
-        <Pressable onPress={() => onSelect(item.key)}>
-          <Badge variant={selected === item.key ? "default" : "outline"}>
-            <Text variant="small">{item.label}</Text>
-          </Badge>
-        </Pressable>
-      )}
-    />
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-5 px-5">
+      <View className="flex-row gap-2">
+        {[{ key: null, label: "All" }, ...options].map((item) => {
+          const active = selected === item.key;
+          return (
+            <Pressable
+              key={item.key ?? "all"}
+              onPress={() => onSelect(item.key)}
+              className={
+                active
+                  ? "bg-primary rounded-full px-4 py-2"
+                  : "border-border bg-card rounded-full border px-4 py-2"
+              }
+            >
+              <Text
+                className={active ? "text-primary-foreground font-title text-sm" : "font-ui text-sm"}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </ScrollView>
   );
-}
-
-function clashMessage(reason: ClashReason): string {
-  if (reason.type === "time_overlap") {
-    return "This event overlaps with something already in your itinerary.";
-  }
-  return `You'd only have ${reason.availableMinutes} min to travel between venues, but need about ${reason.neededMinutes} min.`;
 }
 
 export default function Index() {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const { events, isLoading, isRefreshing, error, isOffline, refresh } = useEvents();
-  const { addToItinerary } = useItinerary();
+  const { addToItinerary, removeFromItinerary } = useItinerary();
   const { purchaseTicket } = useTickets();
   const { coords } = useLocation();
   useShake(refresh);
-  const [clashInfo, setClashInfo] = useState<{ event: EventWithVenue; reason: ClashReason } | null>(
-    null
-  );
+
+  const [clash, setClash] = useState<{
+    event: EventWithVenue;
+    reason: ClashReason;
+    resolutions: Resolution[];
+  } | null>(null);
   const [purchaseNotice, setPurchaseNotice] = useState<{ title: string; message: string } | null>(
     null
   );
   const [category, setCategory] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const head = headline(events.length);
 
+  // Filter -> search -> sort by distance. useMemo because this runs on
+  // every keystroke and the list can be long.
   const sortedEvents = useMemo(() => {
-    const filtered = category ? events.filter((e) => e.imageKey === category) : events;
+    let filtered = category ? events.filter((e) => e.imageKey === category) : events;
+    const q = query.trim().toLowerCase();
+    if (q) {
+      filtered = filtered.filter(
+        (e) => e.title.toLowerCase().includes(q) || e.venue.name.toLowerCase().includes(q)
+      );
+    }
     if (!coords) return filtered;
     return [...filtered].sort(
-      (a, b) =>
-        haversineDistanceKm(coords, a.venue) - haversineDistanceKm(coords, b.venue)
+      (a, b) => haversineDistanceKm(coords, a.venue) - haversineDistanceKm(coords, b.venue)
     );
-  }, [events, coords, category]);
+  }, [events, coords, category, query]);
+
+  const isBrowsingUnfiltered = !category && !query.trim();
+  const featured = isBrowsingUnfiltered && events.length > 0 ? events[0]! : null;
+  const listEvents = featured ? sortedEvents.filter((e) => e.id !== featured.id) : sortedEvents;
+
+  // Group into Tonight / This week / Later. Grouping beats one flat
+  // list: "what's on tonight" is the question users actually have.
+  const sections = useMemo(() => {
+    const groups: Record<string, EventWithVenue[]> = { Tonight: [], "This week": [], Later: [] };
+    for (const event of listEvents) groups[sectionFor(event.startsAt)]!.push(event);
+    return groups;
+  }, [listEvents]);
 
   async function handleAdd(event: EventWithVenue) {
-    const result = await addToItinerary(event);
+    // The whole catalogue is passed so the constraint solver can propose
+    // real alternatives, not just reject.
+    const result = await addToItinerary(event, events);
     if (!result.ok) {
-      setClashInfo({ event, reason: result.reason });
+      setClash({ event, reason: result.reason, resolutions: result.resolutions });
     }
+  }
+
+  // Chosen from the resolution sheet: drop the blocking item, then retry.
+  async function handleSwap(dropEventId: string) {
+    const pending = clash;
+    setClash(null);
+    if (!pending) return;
+    await removeFromItinerary(dropEventId);
+    await addToItinerary(pending.event, events);
   }
 
   async function handleBuy(event: EventWithVenue) {
@@ -196,98 +293,153 @@ export default function Index() {
     } else if (result.queued) {
       setPurchaseNotice({
         title: "Purchase queued",
-        message: "You're offline- this ticket will be purchased automatically once you're back online.",
+        message:
+          "You're offline- this ticket will be purchased automatically once you're back online.",
       });
     }
   }
 
+  const distanceFor = (event: EventWithVenue) =>
+    coords ? haversineDistanceKm(coords, event.venue) : null;
+
   return (
     <View className="bg-background flex-1">
-      <View className="border-border flex-row items-center justify-between border-b px-4 pb-3 pt-16">
-        <View>
-          <Text variant="h4">EventPass</Text>
-          <Text variant="muted">{user?.email}</Text>
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: TAB_BAR_CLEARANCE }}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#E8FF52" />}
+      >
+        <View className="flex-row items-end justify-between pt-16">
+          <View className="flex-1 gap-1">
+            <Text className="text-primary font-ui text-sm">{head.kicker}</Text>
+            <Text className="font-display text-4xl">{head.title}</Text>
+          </View>
+          <Pressable
+            onPress={() => router.push("/profile")}
+            accessibilityLabel="Open your profile"
+            className="border-border bg-card h-11 w-11 items-center justify-center rounded-full border"
+          >
+            <Text className="font-title text-base">
+              {(user?.email?.[0] ?? "?").toUpperCase()}
+            </Text>
+          </Pressable>
         </View>
-        <Button variant="ghost" size="icon" onPress={signOut}>
-          <Icon as={LogOut} size={20} />
-        </Button>
-      </View>
 
-      <View className="flex-1 px-4">
+        <View className="relative mt-5">
+          <View className="absolute left-4 top-0 bottom-0 z-10 justify-center">
+            <Icon as={Search} size={16} className="text-muted-foreground" />
+          </View>
+          <Input
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search events or venues"
+            className="bg-card rounded-full pl-11"
+          />
+        </View>
+
         {isOffline ? (
-          <View className="bg-secondary mt-3 flex-row items-center gap-2 rounded-md px-3 py-2">
-            <Icon as={CloudOff} size={14} className="text-secondary-foreground" />
+          <View className="border-border bg-card mt-3 flex-row items-center gap-2 rounded-full border px-4 py-2.5">
+            <Icon as={CloudOff} size={14} className="text-signal" />
             <Text variant="small">Offline- showing saved events</Text>
           </View>
         ) : null}
 
-        <Text variant="h4" className="mb-2 mt-4 text-lg">
-          Upcoming events
-        </Text>
-
-        {error ? <Text className="text-destructive mb-2">{error}</Text> : null}
+        {error ? <Text className="text-destructive mt-3">{error}</Text> : null}
 
         {!isLoading && events.length > 0 ? (
-          <CategoryFilterBar events={events} selected={category} onSelect={setCategory} />
+          <View className="mt-4">
+            <CategoryFilterBar events={events} selected={category} onSelect={setCategory} />
+          </View>
         ) : null}
 
         {isLoading ? (
-          <View>
+          <View className="mt-5 gap-3">
             <EventCardSkeleton />
             <EventCardSkeleton />
             <EventCardSkeleton />
           </View>
         ) : events.length === 0 ? (
-          <Text variant="muted">No events yet- check back soon.</Text>
-        ) : sortedEvents.length === 0 ? (
-          <Text variant="muted" className="mt-4">
-            No events in this category right now.
-          </Text>
+          <View className="gap-3 py-16">
+            <View className="bg-border h-px w-full" />
+            <Text className="font-display text-2xl">Nothing listed yet</Text>
+            <Text variant="muted" className="max-w-[280px]">
+              Organisers haven't posted anything for this area. Pull down to check again.
+            </Text>
+          </View>
         ) : (
-          <FlatList
-            data={sortedEvents}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <EventCard
-                event={item}
-                distanceKm={coords ? haversineDistanceKm(coords, item.venue) : null}
-                onAdd={handleAdd}
-                onBuy={handleBuy}
-              />
-            )}
-            contentContainerStyle={{ paddingTop: 8, paddingBottom: 24 }}
-            showsVerticalScrollIndicator={false}
-            refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} />}
-          />
+          <>
+            {featured ? (
+              <View className="mt-5">
+                <FeaturedCard
+                  event={featured}
+                  onPress={() => router.push(`/event/${featured.id}`)}
+                />
+              </View>
+            ) : null}
+
+            {listEvents.length === 0 ? (
+              <View className="gap-2 py-16">
+                <View className="bg-border h-px w-full" />
+                <Text className="font-title text-lg">No match for "{query.trim()}"</Text>
+                <Text variant="muted">Try a venue name, or clear the filter.</Text>
+              </View>
+            ) : null}
+
+            {(["Tonight", "This week", "Later"] as const).map((label) => {
+              const group = sections[label]!;
+              if (group.length === 0) return null;
+              return (
+                <View key={label} className="mt-7 gap-3">
+                  <View className="flex-row items-baseline gap-3">
+                    <Text className="font-heading text-xl">{label}</Text>
+                    <View className="bg-border h-px flex-1" />
+                    <Text className="text-muted-foreground font-ui text-sm">
+                      {group.length}
+                    </Text>
+                  </View>
+                  {group.map((event, i) => (
+                    <EventCard
+                      key={event.id}
+                      event={event}
+                      index={i}
+                      distanceKm={distanceFor(event)}
+                      onAdd={() => handleAdd(event)}
+                      onBuy={() => handleBuy(event)}
+                      onOpen={() => router.push(`/event/${event.id}`)}
+                    />
+                  ))}
+                </View>
+              );
+            })}
+          </>
         )}
-      </View>
+      </ScrollView>
 
-      <AlertDialog open={clashInfo !== null} onOpenChange={(open) => !open && setClashInfo(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Can't add this event</AlertDialogTitle>
-            <AlertDialogDescription>
-              {clashInfo ? clashMessage(clashInfo.reason) : ""}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogAction onPress={() => setClashInfo(null)}>
-            <Text>OK</Text>
-          </AlertDialogAction>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ClashResolutionSheet
+        candidate={clash?.event ?? null}
+        reason={clash?.reason ?? null}
+        resolutions={clash?.resolutions ?? []}
+        events={events}
+        onChooseAlternative={(event) => {
+          setClash(null);
+          handleAdd(event);
+        }}
+        onChooseSwap={handleSwap}
+        onDismiss={() => setClash(null)}
+      />
 
-      <AlertDialog
-        open={purchaseNotice !== null}
-        onOpenChange={(open) => !open && setPurchaseNotice(null)}
-      >
+      <AlertDialog open={!!purchaseNotice} onOpenChange={(open) => !open && setPurchaseNotice(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{purchaseNotice?.title}</AlertDialogTitle>
-            <AlertDialogDescription>{purchaseNotice?.message ?? ""}</AlertDialogDescription>
+            <AlertDialogDescription>{purchaseNotice?.message}</AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogAction onPress={() => setPurchaseNotice(null)}>
-            <Text>OK</Text>
-          </AlertDialogAction>
+          <AlertDialogFooter>
+            <AlertDialogAction onPress={() => setPurchaseNotice(null)}>
+              <Text>Got it</Text>
+            </AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </View>

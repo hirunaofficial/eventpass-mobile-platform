@@ -1,3 +1,11 @@
+/**
+ * "My plan" screen - renders the custom <ItineraryTimeline>.
+ *
+ * The screen owns the data and the remove flow; the timeline owns the
+ * drawing and works out clashes itself by calling the shared
+ * findClash(). That split is why the component can be reused without
+ * the caller having to understand the constraint rules.
+ */
 import { useState } from "react";
 import { CloudOff } from "lucide-react-native";
 import { RefreshControl, View } from "react-native";
@@ -20,11 +28,11 @@ import { useItinerary, type ItineraryItemWithEvent } from "@/lib/use-itinerary";
 
 function ItineraryTimelineSkeleton() {
   return (
-    <View className="mt-4 gap-4">
+    <View className="gap-4">
       {[0, 1, 2].map((i) => (
         <View key={i} className="flex-row gap-3">
           <Skeleton className="h-4 w-12 rounded" />
-          <View className="flex-1 gap-2 rounded-md p-3">
+          <View className="border-border bg-card flex-1 gap-2 rounded-xl border p-3">
             <Skeleton className="h-4 w-2/3 rounded" />
             <Skeleton className="h-3 w-1/2 rounded" />
           </View>
@@ -34,6 +42,8 @@ function ItineraryTimelineSkeleton() {
   );
 }
 
+// Maps the API shape onto the component's own minimal prop shape, so
+// the timeline never depends on EventPass's API types.
 function toTimelineItem(item: ItineraryItemWithEvent): ItineraryTimelineItem {
   return {
     id: item.event.id,
@@ -85,14 +95,24 @@ export default function ItineraryScreen() {
 
   return (
     <View className="bg-background flex-1">
-      <View className="border-border border-b px-4 pb-3 pt-16">
-        <Text variant="h4">My Itinerary</Text>
+      <View className="gap-1 px-5 pb-4 pt-16">
+        <Text className="text-primary font-ui text-sm">Your schedule</Text>
+        <View className="flex-row items-end justify-between">
+          <Text className="font-display text-4xl">My plan</Text>
+          {!isLoading ? (
+            <View className="border-border bg-card rounded-md border px-3 py-1.5">
+              <Text className="font-ui text-sm">
+                {items.length} event{items.length === 1 ? "" : "s"}
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </View>
 
-      <View className="flex-1 px-4">
+      <View className="flex-1 px-5">
         {isOffline || pendingSyncCount > 0 ? (
-          <View className="bg-secondary mt-3 flex-row items-center gap-2 rounded-md px-3 py-2">
-            <Icon as={CloudOff} size={14} className="text-secondary-foreground" />
+          <View className="border-border bg-card mb-3 flex-row items-center gap-2 rounded-full border px-4 py-2.5">
+            <Icon as={CloudOff} size={14} className="text-signal" />
             <Text variant="small">
               {isOffline ? "Offline- showing saved itinerary" : "Back online"}
               {pendingSyncCount > 0
@@ -102,15 +122,17 @@ export default function ItineraryScreen() {
           </View>
         ) : null}
 
-        {error ? <Text className="text-destructive mb-2 mt-2">{error}</Text> : null}
+        {error ? <Text className="text-destructive mb-2">{error}</Text> : null}
 
         {isLoading ? (
           <ItineraryTimelineSkeleton />
         ) : (
           <ItineraryTimeline
             items={timelineItems}
-            emptyMessage="Nothing here yet- add events from Discover."
-            refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} />}
+            emptyMessage="Nothing planned yet- add events from Discover."
+            refreshControl={
+              <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#E8FF52" />
+            }
             onItemPress={(item) => {
               setWasClash(false);
               setSelected(item);
