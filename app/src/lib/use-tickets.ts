@@ -58,12 +58,17 @@ export function useTickets() {
     refresh();
   }, [refresh]);
 
-  async function purchaseTicket(eventId: string): Promise<PurchaseResult> {
+  // `paymentRef` comes from the simulated checkout. Optional so the
+  // older direct-buy path still works.
+  async function purchaseTicket(
+    eventId: string,
+    paymentRef?: string
+  ): Promise<PurchaseResult> {
     try {
       await apiFetch("/tickets", {
         method: "POST",
         token,
-        body: JSON.stringify({ eventId }),
+        body: JSON.stringify({ eventId, paymentRef }),
       });
       await refresh();
       return { ok: true };
@@ -78,9 +83,30 @@ export function useTickets() {
       // optimistically to the visible ticket list- the server is the
       // only source of truth for "did this actually succeed," and it
       // may come back as a conflict (sold out) once synced.
-      await enqueueSyncAction("buy_ticket", { eventId });
+      await enqueueSyncAction("buy_ticket", { eventId, paymentRef });
       setPendingSyncCount(await getPendingSyncCount());
       return { ok: true, queued: true };
+    }
+  }
+
+  /**
+   * Cancels a ticket and returns its seat to the event's pool.
+   *
+   * Deliberately NOT offline-queueable, for the same reason purchase is
+   * not applied optimistically: capacity is server-authoritative, and a
+   * cancellation that appears to succeed offline could not be honoured
+   * if the ticket had meanwhile been checked in at the door.
+   */
+  async function cancelTicket(ticketId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    try {
+      await apiFetch(`/tickets/${ticketId}`, { method: "DELETE", token });
+      await refresh();
+      return { ok: true };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof ApiError ? e.message : "You need a connection to cancel a ticket.",
+      };
     }
   }
 
@@ -93,5 +119,6 @@ export function useTickets() {
     pendingSyncCount,
     refresh,
     purchaseTicket,
+    cancelTicket,
   };
 }

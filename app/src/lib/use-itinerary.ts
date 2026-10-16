@@ -90,6 +90,13 @@ export function useItinerary() {
       venue: { lat: event.venue.lat, lng: event.venue.lng },
     };
 
+    // Adding something already planned is idempotent, not an error: the
+    // user's intent is already satisfied. Without this the event would
+    // be compared against ITSELF and reported as overlapping itself.
+    if (items.some((item) => item.eventId === event.id)) {
+      return { ok: true };
+    }
+
     const localClash = findClash(candidate, existing);
     if (localClash) {
       // Constraint violated. Rather than stopping at "no", compute the

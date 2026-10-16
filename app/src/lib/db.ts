@@ -48,6 +48,20 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
         updated_at INTEGER NOT NULL
       );
 
+      -- Saved cards hold ONLY what card tokenisation leaves behind:
+      -- brand, last four digits, expiry and name. The full number and
+      -- the CVC are never written anywhere - not here, not to the
+      -- server, not to the keychain. There is deliberately no column
+      -- they could go in.
+      CREATE TABLE IF NOT EXISTS saved_cards (
+        id TEXT PRIMARY KEY NOT NULL,
+        brand TEXT NOT NULL,
+        last4 TEXT NOT NULL,
+        expiry TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS sync_queue (
         id TEXT PRIMARY KEY NOT NULL,
         action TEXT NOT NULL,
@@ -67,34 +81,17 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
 /**
  * Serializes write transactions against the single shared connection.
  *
- * `getDb()` deliberately hands every caller the SAME `SQLiteDatabase`
- * instance, and SQLite allows only one transaction per connection. The
- * three data hooks (`use-events`/`use-itinerary`/`use-tickets`) all
- * mount at once and each cache their fetch, so their
- * `withTransactionAsync` calls interleaved on that one connection and
- * tore each other's transactions apart:
+ * `getDb()` hands every caller the SAME connection and SQLite allows
+ * one transaction per connection. The three data hooks mount together
+ * and each cached its fetch, so their BEGIN/COMMIT pairs interleaved
+ * and tore each other apart - the writes silently failed, which
+ * disabled the offline cache entirely.
  *
- *   hook A: BEGIN ................... COMMIT
- *   hook B:     BEGIN  -> "cannot start a transaction within a transaction"
- *               ROLLBACK -> "cannot rollback - no transaction is active"
+ * `.catch(() => {})` on the tail is required: without it one failed
+ * write poisons the chain and every later write rejects.
  *
- * Both errors were observed together, alternating, on a real device.
- * The caching writes silently failed, which quietly disabled the
- * offline cache- the feature the local database exists for.
- *
- * The fix is a promise-chain mutex: each call waits for the previous
- * one to settle before opening its own transaction. `.catch(() => {})`
- * on the tail is important- without it one failed write would poison
- * the chain and every later write would reject.
- *
- * This is the same class of bug, and the same shape of fix, as the
- * in-flight locks already in `getDb()` above and in `drainSyncQueue()`:
- * a shared async resource with several independent callers on mount.
- *
- * `withExclusiveTransactionAsync` was considered instead- it opens a
- * second connection per transaction, which avoids the nesting but
- * trades it for lock contention between connections on the same file
- * (SQLITE_BUSY). Serializing on one connection avoids both.
+ * Same fix as the in-flight locks in `getDb()` above and
+ * `drainSyncQueue()` - a shared async resource with several callers.
  */
 let writeChain: Promise<unknown> = Promise.resolve();
 

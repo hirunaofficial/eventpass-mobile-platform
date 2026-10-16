@@ -3,17 +3,23 @@ import { ApiError, apiFetch } from "@/lib/api";
 
 export type SyncAction = "add_itinerary" | "remove_itinerary" | "buy_ticket";
 
+/** `paymentRef` is only present for buy_ticket, hence optional. */
+export interface SyncActionPayload {
+  eventId: string;
+  paymentRef?: string;
+}
+
 export interface SyncQueueEntry {
   id: string;
   action: SyncAction;
-  payload: { eventId: string };
+  payload: SyncActionPayload;
   status: "pending" | "synced" | "conflict";
   createdAt: number;
 }
 
 export async function enqueueSyncAction(
   action: SyncAction,
-  payload: { eventId: string }
+  payload: SyncActionPayload
 ): Promise<void> {
   const db = await getDb();
   const id = `${action}-${payload.eventId}-${Date.now()}`;
