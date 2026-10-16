@@ -48,6 +48,12 @@ model Event {
   imageKey       String?
   tickets        Ticket[]
   itineraryItems ItineraryItem[]
+
+  // Every /events request orders by startsAt, and the clash catalogue
+  // filters on it. Without an index that is a full scan plus a sort on
+  // each call- cheap at seed scale, wrong by default at any real one.
+  @@index([startsAt])
+  @@index([venueId])
 }
 
 enum TicketStatus {
@@ -64,8 +70,17 @@ model Ticket {
   eventId     String
   status      TicketStatus
   qrToken     String       @unique @default(cuid())
+  // Reference returned by the (simulated) payment authorisation. Never
+  // card data - see packages/shared/src/payment.ts. Nullable because
+  // tickets seeded or bought before checkout existed have none.
+  paymentRef  String?
   createdAt   DateTime     @default(now())
   checkedInAt DateTime?
+
+  // The wallet lists a user's tickets on every open; check-in looks up
+  // by qrToken (already indexed by @unique).
+  @@index([userId])
+  @@index([eventId])
 }
 
 model ItineraryItem {

@@ -14,7 +14,13 @@ router.get("/", requireAuth, async (req, res) => {
   res.json(tickets);
 });
 
-const purchaseSchema = z.object({ eventId: z.string() });
+const purchaseSchema = z.object({
+  eventId: z.string(),
+  // Optional: a reference from the simulated payment step. The server
+  // deliberately accepts no card fields at all, so there is nothing
+  // sensitive to mishandle even by accident.
+  paymentRef: z.string().max(64).optional(),
+});
 
 // POST /tickets - buy a ticket (mock payment; capacity is the real
 // constraint). Attendee-accessible: requireAuth only.
@@ -24,7 +30,7 @@ router.post("/", requireAuth, async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten().fieldErrors });
     return;
   }
-  const { eventId } = parsed.data;
+  const { eventId, paymentRef } = parsed.data;
 
   const event = await prisma.event.findUnique({ where: { id: eventId } });
   if (!event) {
@@ -45,7 +51,7 @@ router.post("/", requireAuth, async (req, res) => {
   }
 
   const ticket = await prisma.ticket.create({
-    data: { userId: req.userId!, eventId, status: "confirmed" },
+    data: { userId: req.userId!, eventId, status: "confirmed", paymentRef: paymentRef ?? null },
     include: { event: { include: { venue: true } } },
   });
 
@@ -111,6 +117,63 @@ router.post("/check-in", requireAuth, requireStaff, async (req, res) => {
   });
 
   res.json({ valid: true, ticket: checkedInTicket });
+});
+
+
+// DELETE /tickets/:id - cancel a ticket and return its seat to the pool.
+//
+// Two guards matter here:
+//   - scoped to req.userId, so one user can never cancel another's
+//     ticket even with a valid session and a guessed id;
+//   - guarded on `checkedInAt: null` and status 'confirmed', because a
+//     ticket already used at the door must not be cancellable - that
+//     would hand back capacity for a seat someone has occupied.
+//
+// The two writes are wrapped in a transaction: releasing capacity
+// without cancelling the ticket (or the reverse) would corrupt the
+// count permanently, and `updateMany`'s conditional guard only makes
+// each statement individually safe, not the pair.
+router.delete("/:id", requireAuth, async (req, res) => {
+  const ticketId = String(req.params.id);
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, userId: req.userId },
+  });
+  if (!ticket) {
+    res.status(404).json({ error: "Ticket not found" });
+    return;
+  }
+  if (ticket.checkedInAt) {
+    res.status(409).json({ error: "This ticket has already been used" });
+    return;
+  }
+  if (ticket.status === "cancelled") {
+    res.status(409).json({ error: "This ticket is already cancelled" });
+    return;
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    // Conditional update: if a concurrent request cancelled this ticket
+    // first, count is 0 and we must not release capacity twice.
+    const cancelled = await tx.ticket.updateMany({
+      where: { id: ticketId, userId: req.userId, status: "confirmed", checkedInAt: null },
+      data: { status: "cancelled" },
+    });
+    if (cancelled.count === 0) return null;
+
+    await tx.event.update({
+      where: { id: ticket.eventId },
+      data: { remaining: { increment: 1 } },
+    });
+    return cancelled.count;
+  });
+
+  if (result === null) {
+    res.status(409).json({ error: "This ticket could not be cancelled" });
+    return;
+  }
+
+  res.status(200).json({ cancelled: true, ticketId });
 });
 
 export default router;

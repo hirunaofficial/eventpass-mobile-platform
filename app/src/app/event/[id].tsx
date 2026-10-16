@@ -9,7 +9,7 @@
 import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { ArrowLeft, CalendarClock, MapPin, TicketIcon, Users } from "lucide-react-native";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import type { ClashReason, Resolution } from "@eventpass/shared";
 import {
   AlertDialog,
@@ -59,7 +59,7 @@ function BackButton() {
 
 export default function EventDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { events, isLoading } = useEvents();
+  const { events, isLoading, isRefreshing, refresh } = useEvents();
   const { addToItinerary, removeFromItinerary } = useItinerary();
   const { purchaseTicket } = useTickets();
 
@@ -67,6 +67,7 @@ export default function EventDetailsScreen() {
     null
   );
   const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
 
   const event = events.find((item) => item.id === id);
 
@@ -74,11 +75,19 @@ export default function EventDetailsScreen() {
   // alternatives on rejection instead of just saying no.
   async function handleAdd() {
     if (!event) return;
-    const result = await addToItinerary(event, events);
-    if (!result.ok) {
-      setClash({ reason: result.reason, resolutions: result.resolutions });
-    } else {
-      setNotice({ title: "Added to your plan", message: `${event.title} is now in your itinerary.` });
+    setIsAdding(true);
+    try {
+      const result = await addToItinerary(event, events);
+      if (!result.ok) {
+        setClash({ reason: result.reason, resolutions: result.resolutions });
+      } else {
+        setNotice({
+          title: "Added to your plan",
+          message: `${event.title} is now in your itinerary.`,
+        });
+      }
+    } finally {
+      setIsAdding(false);
     }
   }
 
@@ -86,24 +95,18 @@ export default function EventDetailsScreen() {
   async function handleSwap(dropEventId: string) {
     setClash(null);
     if (!event) return;
-    await removeFromItinerary(dropEventId);
-    await addToItinerary(event, events);
+    setIsAdding(true);
+    try {
+      await removeFromItinerary(dropEventId);
+      await addToItinerary(event, events);
+    } finally {
+      setIsAdding(false);
+    }
   }
 
-  async function handleBuy() {
+  function handleBuy() {
     if (!event) return;
-    const result = await purchaseTicket(event.id);
-    if (!result.ok) {
-      setNotice({ title: "Couldn't buy this ticket", message: result.error });
-    } else if (result.queued) {
-      setNotice({
-        title: "Purchase queued",
-        message:
-          "You're offline- this ticket will be purchased automatically once you're back online.",
-      });
-    } else {
-      setNotice({ title: "Ticket purchased", message: "Find your QR code under the Tickets tab." });
-    }
+    router.push(`/checkout/${event.id}`);
   }
 
   if (isLoading && !event) {
@@ -125,7 +128,7 @@ export default function EventDetailsScreen() {
     return (
       <View className="bg-background flex-1 items-center justify-center gap-4 p-6">
         <Text className="font-title text-center text-lg">This event couldn't be found.</Text>
-        <Button className="rounded-full" onPress={() => router.back()}>
+        <Button className="rounded-md" onPress={() => router.back()}>
           <Text>Back</Text>
         </Button>
       </View>
@@ -139,8 +142,16 @@ export default function EventDetailsScreen() {
 
   return (
     <View className="bg-background flex-1">
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        // The detail screen reads from the cached list, so refreshing
+        // here refetches that list and this screen follows.
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#E8FF52" />
+        }
+      >
         <View className="h-72 w-full">
           <EventImage imageKey={event.imageKey} className="h-full w-full" iconSize={56} />
           <View className="absolute left-5 top-16">
@@ -203,15 +214,15 @@ export default function EventDetailsScreen() {
           <View className="mt-2 flex-row gap-3">
             <Button
               variant="outline"
-              className="flex-1 rounded-full"
+              className="flex-1 rounded-md"
               disabled={soldOut}
               onPress={handleBuy}
             >
               <Icon as={TicketIcon} size={15} />
               <Text>{soldOut ? "Sold out" : "Buy ticket"}</Text>
             </Button>
-            <Button className="flex-1 rounded-full" onPress={handleAdd}>
-              <Text>Add to plan</Text>
+            <Button className="flex-1 rounded-md" loading={isAdding} onPress={handleAdd}>
+              <Text>{isAdding ? "Adding..." : "Add to plan"}</Text>
             </Button>
           </View>
         </View>
