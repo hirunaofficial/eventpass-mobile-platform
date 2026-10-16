@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { CameraView, scanFromURLAsync, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
-import { ImageDown, LogOut } from "lucide-react-native";
-import { View } from "react-native";
+import { Image, ImageDown, LogOut, Ticket as TicketIcon } from "lucide-react-native";
+import { ActivityIndicator, Image as RNImage, Linking, Modal, Pressable, ScrollView, View } from "react-native";
 import type { TicketWithEvent } from "@eventpass/shared";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { ApiError, apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { listTicketImages, type SavedTicketImage } from "@/lib/ticket-images";
 
 type ScanResult =
   | { status: "success"; ticket: TicketWithEvent }
@@ -20,10 +21,20 @@ export default function ScanScreen() {
   const [scanned, setScanned] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [checkedInCount, setCheckedInCount] = useState(0);
+  // Check-in hits the network; without feedback a slow connection
+  // looks like a failed scan and staff re-scan unnecessarily.
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
+  const [isPicking, setIsPicking] = useState(false);
+  // The image-source sheet: saved ticket images first, device gallery as
+  // the other route. Opened rather than jumping straight to the gallery
+  // because on Expo Go the gallery is usually the one that has nothing.
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const [savedImages, setSavedImages] = useState<SavedTicketImage[]>([]);
 
   async function handleScanned(qrToken: string) {
     if (scanned) return;
     setScanned(true);
+    setIsCheckingIn(true);
     try {
       const data = await apiFetch<{ valid: true; ticket: TicketWithEvent }>(
         "/tickets/check-in",
@@ -36,6 +47,8 @@ export default function ScanScreen() {
         status: "error",
         message: e instanceof ApiError ? e.message : "Couldn't check in this ticket.",
       });
+    } finally {
+      setIsCheckingIn(false);
     }
   }
 
@@ -59,7 +72,51 @@ export default function ScanScreen() {
    * exactly the same server call and the same single-use enforcement -
    * this is a different input source, not a second check-in code path.
    */
-  async function pickFromLibrary() {
+  const openImageSource = useCallback(async () => {
+    // Open first, then fill. Reading the manifest touches the file
+    // system, and a failure there should still leave staff with the
+    // gallery route rather than a button that silently does nothing.
+    setSourceOpen(true);
+    try {
+      setSavedImages(await listTicketImages());
+    } catch (e) {
+      console.error("Couldn't list saved ticket images", e);
+      setSavedImages([]);
+    }
+  }, []);
+
+  /**
+   * Decodes a QR out of an image file and runs the normal check-in.
+   *
+   * Reuses handleScanned(), so an image and a live camera frame hit
+   * exactly the same server call and the same single-use enforcement.
+   * This is a different input source, not a second check-in code path.
+   */
+  async function checkInFromImageUri(uri: string) {
+    setIsPicking(true);
+    try {
+      const codes = await scanFromURLAsync(uri, ["qr"]);
+      const data = codes?.[0]?.data;
+      if (!data) {
+        setResult({
+          status: "error",
+          message: "No QR code found in that image. Pick a saved ticket image.",
+        });
+        return;
+      }
+      // handleScanned() early-returns while `scanned` is true, so clear
+      // it first - otherwise a previous scan would silently block this one.
+      setScanned(false);
+      await handleScanned(data);
+    } catch {
+      setResult({ status: "error", message: "Couldn't read that image." });
+    } finally {
+      setIsPicking(false);
+    }
+  }
+
+  async function pickFromGallery() {
+    setSourceOpen(false);
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       setResult({
@@ -74,24 +131,12 @@ export default function ScanScreen() {
       quality: 1,
     });
     if (picked.canceled || !picked.assets?.[0]) return;
+    await checkInFromImageUri(picked.assets[0].uri);
+  }
 
-    try {
-      const codes = await scanFromURLAsync(picked.assets[0].uri, ["qr"]);
-      const data = codes?.[0]?.data;
-      if (!data) {
-        setResult({
-          status: "error",
-          message: "No QR code found in that image. Pick the saved ticket screenshot.",
-        });
-        return;
-      }
-      // handleScanned() early-returns while `scanned` is true, so clear it
-      // first- otherwise a previous scan would silently block this one.
-      setScanned(false);
-      await handleScanned(data);
-    } catch {
-      setResult({ status: "error", message: "Couldn't read that image." });
-    }
+  async function pickSaved(image: SavedTicketImage) {
+    setSourceOpen(false);
+    await checkInFromImageUri(image.uri);
   }
 
   const header = (
@@ -118,13 +163,32 @@ export default function ScanScreen() {
     return (
       <View className="flex-1 bg-black">
         {header}
-        <View className="flex-1 items-center justify-center gap-4 p-6">
-          <Text className="text-center text-white">
-            Camera access is needed to scan ticket QR codes.
+        <View className="flex-1 items-center justify-center gap-5 p-8">
+          <Text className="font-display text-center text-2xl text-white">
+            Camera access needed
           </Text>
-          <Button onPress={requestPermission}>
-            <Text>Grant camera permission</Text>
-          </Button>
+          <Text className="text-center text-white/60">
+            Check-in scans a ticket's QR code, so EventPass needs the camera.
+            {permission.canAskAgain
+              ? ""
+              : " Permission was declined- enable it in Settings to continue."}
+          </Text>
+          <View className="w-full gap-2">
+            {permission.canAskAgain ? (
+              <Button className="bg-primary rounded-md" onPress={requestPermission}>
+                <Text>Allow camera</Text>
+              </Button>
+            ) : (
+              <Button className="bg-primary rounded-md" onPress={() => Linking.openSettings()}>
+                <Text>Open Settings</Text>
+              </Button>
+            )}
+            {/* Always a way out: without this, staff who decline are
+                stranded on a screen with no action that works. */}
+            <Button variant="ghost" onPress={signOut}>
+              <Text className="text-white/70">Sign out</Text>
+            </Button>
+          </View>
         </View>
       </View>
     );
@@ -146,7 +210,7 @@ export default function ScanScreen() {
         </View>
 
         <View className="absolute inset-x-0 top-4 items-center">
-          <Text className="font-ui rounded-full bg-black/70 px-4 py-2 text-white">
+          <Text className="font-ui rounded-md bg-black/70 px-4 py-2 text-white">
             Point the camera at a ticket QR code
           </Text>
         </View>
@@ -154,40 +218,121 @@ export default function ScanScreen() {
         <View className="absolute inset-x-0 bottom-10 items-center px-6">
           <Button
             variant="outline"
-            className="w-full flex-row rounded-full border-white/25 bg-black/60"
-            onPress={pickFromLibrary}
+            className="w-full flex-row rounded-md border-white/25 bg-black/60"
+            loading={isPicking}
+            onPress={openImageSource}
           >
-            <Icon as={ImageDown} size={16} className="text-signal" />
-            <Text className="text-white">Scan from photo</Text>
+            {!isPicking ? <Icon as={ImageDown} size={16} className="text-[#E8FF52]" /> : null}
+            <Text className="text-white">
+              {isPicking ? "Reading image..." : "Scan from image"}
+            </Text>
           </Button>
           <Text className="mt-2 text-center text-white/50" variant="small">
             Use a saved ticket image when scanning on one device
           </Text>
         </View>
 
+        <Modal
+          visible={sourceOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setSourceOpen(false)}
+        >
+          <Pressable
+            className="flex-1 justify-end bg-black/70"
+            onPress={() => setSourceOpen(false)}
+          >
+            {/* Swallow taps inside the sheet so only the backdrop closes it.
+                Hardcoded dark, like the rest of the scanner chrome: this
+                screen is a door-staff tool and stays dark whichever theme
+                the attendee side of the app is set to. */}
+            <Pressable className="rounded-t-card gap-3 border-t border-white/10 bg-[#141210] p-5 pb-8">
+              <Text className="font-title text-base text-white">Scan a ticket image</Text>
+              <Text className="text-white/60">
+                Pick the ticket image saved from the attendee's wallet.
+              </Text>
+
+              {savedImages.length > 0 ? (
+                <ScrollView className="max-h-72" showsVerticalScrollIndicator={false}>
+                  <View className="gap-2">
+                    {savedImages.map((image) => (
+                      <Pressable
+                        key={image.ticketId}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Check in ${image.title}`}
+                        className="rounded-md flex-row items-center gap-3 border border-white/10 bg-white/5 p-2"
+                        onPress={() => pickSaved(image)}
+                      >
+                        <RNImage
+                          source={{ uri: image.uri }}
+                          className="rounded-sm h-12 w-12"
+                          resizeMode="cover"
+                        />
+                        <View className="flex-1">
+                          <Text className="font-ui text-white" numberOfLines={1}>
+                            {image.title}
+                          </Text>
+                          <Text variant="small" className="text-white/50" numberOfLines={1}>
+                            {image.venue}
+                          </Text>
+                        </View>
+                        <Icon as={TicketIcon} size={16} className="text-[#E8FF52]" />
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
+              ) : (
+                <Text variant="small" className="text-white/50">
+                  No ticket images saved on this device yet. Save one from the
+                  Tickets tab, or browse the gallery below.
+                </Text>
+              )}
+
+              <Button
+                variant="outline"
+                className="flex-row rounded-md border-white/25 bg-transparent"
+                onPress={pickFromGallery}
+              >
+                <Icon as={Image} size={16} className="text-[#E8FF52]" />
+                <Text className="text-white">Browse device photos</Text>
+              </Button>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        {isCheckingIn && !result ? (
+          <View className="absolute inset-0 items-center justify-center bg-black/70">
+            <View className="rounded-card items-center gap-3 border border-white/10 bg-[#141210] px-8 py-6">
+              <ActivityIndicator color="#E8FF52" />
+              <Text className="font-title text-base text-white">Checking in...</Text>
+            </View>
+          </View>
+        ) : null}
+
         {result ? (
           <View className="absolute inset-0 items-center justify-center bg-black/70 p-6">
-            <View className="border-border bg-card rounded-card w-full items-center gap-3 border p-6">
+            <View className="rounded-card w-full items-center gap-3 border border-white/10 bg-[#141210] p-6">
               {result.status === "success" ? (
                 <>
-                  <Text className="font-title text-center text-lg">
+                  <Text className="font-title text-center text-lg text-[#E8FF52]">
                     Checked in ✓
                   </Text>
-                  <Text>{result.ticket.event.title}</Text>
-                  <Text variant="muted">{result.ticket.event.venue.name}</Text>
+                  <Text className="text-white">{result.ticket.event.title}</Text>
+                  <Text className="text-white/60">{result.ticket.event.venue.name}</Text>
                 </>
               ) : (
                 <>
-                  <Text className="font-title text-destructive text-center text-lg">
+                  <Text className="font-title text-center text-lg text-[#FF5B35]">
                     Check-in failed
                   </Text>
-                  <Text variant="muted" className="text-center">
-                    {result.message}
-                  </Text>
+                  <Text className="text-center text-white/60">{result.message}</Text>
                 </>
               )}
-              <Button className="bg-signal mt-2 w-full rounded-full" onPress={scanNext}>
-                <Text>Scan next ticket</Text>
+              <Button
+                className="mt-2 w-full rounded-md bg-[#E8FF52]"
+                onPress={scanNext}
+              >
+                <Text className="text-[#141210]">Scan next ticket</Text>
               </Button>
             </View>
           </View>
