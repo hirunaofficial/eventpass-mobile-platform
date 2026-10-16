@@ -46,6 +46,8 @@ export interface Ticket {
   eventId: string;
   status: TicketStatus;
   qrToken: string;
+  /** Simulated payment authorisation reference; never card data. */
+  paymentRef: string | null;
   createdAt: string; // ISO 8601
   checkedInAt: string | null; // ISO 8601
 }
@@ -79,3 +81,17 @@ export type {
   Resolution,
   SuggestionCandidate,
 } from "./clash.js";
+
+// Simulated payment validation (see payment.ts). Shared so the same
+// rules could be re-checked server-side; no card data ever leaves the
+// device regardless.
+export {
+  brandRules,
+  detectBrand,
+  expiryIsValid,
+  formatCardNumber,
+  mockAuthorise,
+  passesLuhn,
+  validateCard,
+} from "./payment.js";
+export type { CardBrand, CardDraft, CardFieldError } from "./payment.js";
