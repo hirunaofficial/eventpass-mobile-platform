@@ -2,23 +2,17 @@ import { type ClassValue, clsx } from "clsx";
 import { extendTailwindMerge } from "tailwind-merge";
 
 /**
- * tailwind-merge has to be told about custom `fontSize` keys.
+ * tailwind-merge must be told about custom `fontSize` keys.
  *
- * `text-*` is ambiguous- it is both a font-size and a text-colour
- * utility- so tailwind-merge decides which group a class belongs to by
- * recognising the value. It knows the built-in sizes (`text-base`,
- * `text-xl`), but not ours, so `text-eyebrow` was being classified as a
- * COLOUR. That made it conflict with any real colour earlier in the
- * string, and tailwind-merge resolved the conflict by deleting the
- * colour:
+ * `text-*` is both a size and a colour utility, so tailwind-merge
+ * decides the group by recognising the value. It knows `text-base`,
+ * but not ours - it read `text-eyebrow` as a COLOUR and deleted the
+ * real colour before it:
  *
- *   cn("text-muted-foreground font-ui text-eyebrow uppercase")
- *     -> "font-ui text-eyebrow uppercase"      // colour gone
+ *   cn("text-muted-foreground font-ui text-eyebrow") // colour gone
  *
- * Every eyebrow label and the role badge therefore rendered with no
- * colour at all and fell back to default black- invisible on the dark
- * theme. Registering the custom sizes here fixes it everywhere at once,
- * rather than reordering classes at each call site.
+ * Every eyebrow label and the role badge then fell back to black,
+ * invisible on the dark theme.
  */
 const twMerge = extendTailwindMerge({
   extend: {

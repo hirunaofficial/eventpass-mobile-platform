@@ -88,7 +88,7 @@ export default function SignupScreen() {
               />
             </View>
             {error ? <Text className="text-destructive">{error}</Text> : null}
-            <Button onPress={handleSubmit} disabled={submitting} size="lg" className="mt-2 rounded-full">
+            <Button onPress={handleSubmit} loading={submitting} size="lg" className="mt-2 rounded-md">
               <Text>{submitting ? "Signing up..." : "Sign up"}</Text>
             </Button>
           </View>

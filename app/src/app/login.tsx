@@ -88,7 +88,7 @@ export default function LoginScreen() {
               />
             </View>
             {error ? <Text className="text-destructive">{error}</Text> : null}
-            <Button onPress={handleSubmit} disabled={submitting} size="lg" className="mt-2 rounded-full">
+            <Button onPress={handleSubmit} loading={submitting} size="lg" className="mt-2 rounded-md">
               <Text>{submitting ? "Logging in..." : "Log in"}</Text>
             </Button>
           </View>

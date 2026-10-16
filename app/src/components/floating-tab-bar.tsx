@@ -75,22 +75,33 @@ function TabItem({
 }) {
   const Icon = ICONS[routeName] ?? Compass;
   const { colorScheme } = useColorScheme();
-  // Lucide icons take a `color` prop, not a className, so the token has
-  // to be resolved in JS. Hardcoding the dark-theme grey left inactive
-  // tabs washed out on the light theme.
+  // Phosphor icons take a `color` prop, not a className, so the token
+  // is resolved in JS. Hardcoding the dark grey washed out in light.
   const inactiveColor = colorScheme === "dark" ? "#8A8276" : "#6B6459";
+  // The active pill is filled with --primary, which INVERTS between
+  // themes: acid in dark, ink in light. The icon on top of it must
+  // therefore be --primary-foreground, not a fixed dark value - a
+  // hardcoded dark icon vanished against the dark pill in light mode.
+  const activeColor = colorScheme === "dark" ? "#141210" : "#F2EFE6";
+
   const progress = useDerivedValue(() =>
-    withSpring(isFocused ? 1 : 0, { damping: 18, stiffness: 180 })
+    withSpring(isFocused ? 1 : 0, { damping: 20, stiffness: 200 })
   );
 
   const pillStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
-    transform: [{ scale: interpolate(progress.value, [0, 1], [0.8, 1]) }],
+    transform: [{ scale: interpolate(progress.value, [0, 1], [0.94, 1]) }],
   }));
 
+  // Labels are ALWAYS laid out, and only their colour changes.
+  //
+  // An earlier version animated each label's width from 0, so the bar
+  // physically resized whenever the active tab changed - and because
+  // "Discover" is much wider than "Plan", the whole bar visibly jumped
+  // and re-centred on every switch. Keeping every label mounted makes
+  // the bar a fixed size; the pill is the only thing that moves.
   const labelStyle = useAnimatedStyle(() => ({
-    opacity: progress.value,
-    width: interpolate(progress.value, [0, 1], [0, 58]),
+    opacity: interpolate(progress.value, [0, 1], [0.75, 1]),
   }));
 
   return (
@@ -99,23 +110,27 @@ function TabItem({
       accessibilityState={isFocused ? { selected: true } : {}}
       accessibilityLabel={LABELS[routeName] ?? routeName}
       onPress={onPress}
-      className="flex-row items-center justify-center gap-1 rounded-full px-4 py-2.5"
+      className="flex-1 flex-row items-center justify-center gap-1.5 rounded-md px-2 py-2.5"
     >
-      <Animated.View
-        style={pillStyle}
-        className="bg-primary absolute inset-0 rounded-full"
-      />
-      {/* The WEIGHT changes on focus, not just the colour- a filled icon
-          against outlined neighbours reads as selected instantly, and is
-          what separates this from stock thin-stroke tab iconography. */}
+      <Animated.View style={pillStyle} className="bg-primary absolute inset-0 rounded-md" />
+
+      {/* The WEIGHT changes on focus, not just the colour - a filled
+          icon among outlined neighbours reads as selected instantly. */}
       <Icon
-        size={22}
-        // The active pill is acid yellow, so its icon must be DARK.
-        color={isFocused ? "#141210" : inactiveColor}
+        size={20}
+        color={isFocused ? activeColor : inactiveColor}
         weight={isFocused ? "fill" : "regular"}
       />
-      <Animated.View style={labelStyle} className="overflow-hidden">
-        <Text numberOfLines={1} className="text-primary-foreground font-title text-xs">
+
+      <Animated.View style={labelStyle}>
+        <Text
+          numberOfLines={1}
+          className={
+            isFocused
+              ? "text-primary-foreground font-title text-xs"
+              : "text-muted-foreground font-ui text-xs"
+          }
+        >
           {LABELS[routeName] ?? routeName}
         </Text>
       </Animated.View>
@@ -130,9 +145,9 @@ export function FloatingTabBar({ state, navigation }: TabBarProps) {
     <View
       pointerEvents="box-none"
       style={{ paddingBottom: Math.max(insets.bottom, 12) }}
-      className="absolute inset-x-0 bottom-0 items-center"
+      className="absolute inset-x-0 bottom-0 items-center px-5"
     >
-      <View className="border-border bg-elevated flex-row items-center gap-1 rounded-full border p-1.5">
+      <View className="border-border bg-elevated w-full flex-row items-center gap-1 rounded-lg border p-1.5">
         {state.routes.map((route: TabRoute, index: number) => {
           const isFocused = state.index === index;
 

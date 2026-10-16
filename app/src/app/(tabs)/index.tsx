@@ -4,7 +4,6 @@
  * Composes five hooks, each owning one concern:
  *   useEvents    - catalogue + offline cache
  *   useItinerary - add, and the constraint check on add
- *   useTickets   - purchase
  *   useLocation  - GPS, for distance sorting
  *   useShake     - accelerometer, shake to refresh
  *
@@ -21,7 +20,6 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { haversineDistanceKm, type ClashReason, type EventWithVenue, type Resolution } from "@eventpass/shared";
 import { ClashResolutionSheet } from "@/components/clash-resolution-sheet";
 import { EventImage } from "@/components/event-image";
-import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { PhosphorIcon } from "@/components/ui/phosphor-icon";
@@ -29,11 +27,11 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useAuth } from "@/lib/auth-context";
+import { useConnectivity } from "@/lib/use-connectivity";
 import { useEvents } from "@/lib/use-events";
 import { useItinerary } from "@/lib/use-itinerary";
 import { useLocation } from "@/lib/use-location";
 import { useShake } from "@/lib/use-shake";
-import { useTickets } from "@/lib/use-tickets";
 
 /** Space the floating tab bar needs so the last card isn't trapped under it. */
 const TAB_BAR_CLEARANCE = 110;
@@ -69,7 +67,13 @@ function sectionFor(startsAt: string): "Tonight" | "This week" | "Later" {
 
 function FeaturedCard({ event, onPress }: { event: EventWithVenue; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} className="border-border bg-card rounded-card overflow-hidden border">
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Featured: ${event.title} at ${event.venue.name}`}
+      accessibilityHint="Opens event details"
+      className="border-border bg-card rounded-card overflow-hidden border"
+    >
       <View className="h-52 w-full">
         <EventImage imageKey={event.imageKey} className="h-full w-full" iconSize={48} />
       </View>
@@ -96,6 +100,7 @@ function EventCard({
   event,
   distanceKm,
   index,
+  isAdding,
   onAdd,
   onBuy,
   onOpen,
@@ -103,6 +108,7 @@ function EventCard({
   event: EventWithVenue;
   distanceKm: number | null;
   index: number;
+  isAdding: boolean;
   onAdd: () => void;
   onBuy: () => void;
   onOpen: () => void;
@@ -113,6 +119,11 @@ function EventCard({
     <Animated.View entering={FadeInDown.delay(Math.min(index, 6) * 50).duration(320)}>
       <Pressable
         onPress={onOpen}
+        accessibilityRole="button"
+        // Screen readers announce the whole card as one item; the
+        // buttons inside remain separately focusable.
+        accessibilityLabel={`${event.title}, ${event.venue.name}, ${formatEventTime(event.startsAt)}${soldOut ? ", sold out" : ""}`}
+        accessibilityHint="Opens event details"
         className="border-border bg-card rounded-card flex-row gap-3 border p-3"
       >
         {/* Inner core: its own surface + radius inside the card shell. */}
@@ -136,13 +147,13 @@ function EventCard({
           </View>
 
           <View className="flex-row items-center gap-2">
-            <Button size="sm" className="flex-1 rounded-full" onPress={onAdd}>
-              <Text>Add to plan</Text>
+            <Button size="sm" className="flex-1 rounded-md" loading={isAdding} onPress={onAdd}>
+              <Text>{isAdding ? "Adding..." : "Add to plan"}</Text>
             </Button>
             <Button
               size="sm"
               variant="outline"
-              className="rounded-full"
+              className="rounded-md"
               disabled={soldOut}
               onPress={onBuy}
             >
@@ -166,7 +177,7 @@ function EventCardSkeleton() {
         <Skeleton className="h-4 w-3/4 rounded" />
         <Skeleton className="h-3 w-1/2 rounded" />
         <Skeleton className="h-3 w-1/3 rounded" />
-        <Skeleton className="mt-2 h-8 w-full rounded-full" />
+        <Skeleton className="mt-2 h-8 w-full rounded-md" />
       </View>
     </View>
   );
@@ -201,10 +212,13 @@ function CategoryFilterBar({
             <Pressable
               key={item.key ?? "all"}
               onPress={() => onSelect(item.key)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={`Filter by ${item.label}`}
               className={
                 active
-                  ? "bg-primary rounded-full px-4 py-2"
-                  : "border-border bg-card rounded-full border px-4 py-2"
+                  ? "bg-primary rounded-md px-4 py-2"
+                  : "border-border bg-card rounded-md border px-4 py-2"
               }
             >
               <Text
@@ -224,8 +238,8 @@ export default function Index() {
   const { user } = useAuth();
   const { events, isLoading, isRefreshing, error, isOffline, refresh } = useEvents();
   const { addToItinerary, removeFromItinerary } = useItinerary();
-  const { purchaseTicket } = useTickets();
   const { coords } = useLocation();
+  const { state: connectivity } = useConnectivity();
   useShake(refresh);
 
   const [clash, setClash] = useState<{
@@ -233,11 +247,11 @@ export default function Index() {
     reason: ClashReason;
     resolutions: Resolution[];
   } | null>(null);
-  const [purchaseNotice, setPurchaseNotice] = useState<{ title: string; message: string } | null>(
-    null
-  );
   const [category, setCategory] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  // Which event is mid-add. Keyed by id rather than a single boolean
+  // so only the pressed card's button shows a spinner.
+  const [addingId, setAddingId] = useState<string | null>(null);
   const head = headline(events.length);
 
   // Filter -> search -> sort by distance. useMemo because this runs on
@@ -269,11 +283,16 @@ export default function Index() {
   }, [listEvents]);
 
   async function handleAdd(event: EventWithVenue) {
-    // The whole catalogue is passed so the constraint solver can propose
-    // real alternatives, not just reject.
-    const result = await addToItinerary(event, events);
-    if (!result.ok) {
-      setClash({ event, reason: result.reason, resolutions: result.resolutions });
+    setAddingId(event.id);
+    try {
+      // The whole catalogue is passed so the constraint solver can
+      // propose real alternatives, not just reject.
+      const result = await addToItinerary(event, events);
+      if (!result.ok) {
+        setClash({ event, reason: result.reason, resolutions: result.resolutions });
+      }
+    } finally {
+      setAddingId(null);
     }
   }
 
@@ -282,21 +301,19 @@ export default function Index() {
     const pending = clash;
     setClash(null);
     if (!pending) return;
-    await removeFromItinerary(dropEventId);
-    await addToItinerary(pending.event, events);
+    setAddingId(pending.event.id);
+    try {
+      await removeFromItinerary(dropEventId);
+      await addToItinerary(pending.event, events);
+    } finally {
+      setAddingId(null);
+    }
   }
 
-  async function handleBuy(event: EventWithVenue) {
-    const result = await purchaseTicket(event.id);
-    if (!result.ok) {
-      setPurchaseNotice({ title: "Couldn't buy this ticket", message: result.error });
-    } else if (result.queued) {
-      setPurchaseNotice({
-        title: "Purchase queued",
-        message:
-          "You're offline- this ticket will be purchased automatically once you're back online.",
-      });
-    }
+  // Purchase now goes through checkout rather than buying instantly -
+  // the capacity guard still runs server-side at the moment of payment.
+  function handleBuy(event: EventWithVenue) {
+    router.push(`/checkout/${event.id}`);
   }
 
   const distanceFor = (event: EventWithVenue) =>
@@ -334,14 +351,20 @@ export default function Index() {
             value={query}
             onChangeText={setQuery}
             placeholder="Search events or venues"
-            className="bg-card rounded-full pl-11"
+            className="bg-card rounded-md pl-11"
           />
         </View>
 
         {isOffline ? (
-          <View className="border-border bg-card mt-3 flex-row items-center gap-2 rounded-full border px-4 py-2.5">
-            <Icon as={CloudOff} size={14} className="text-signal" />
-            <Text variant="small">Offline- showing saved events</Text>
+          <View className="border-border bg-card mt-3 flex-row items-center gap-2 rounded-md border px-4 py-2.5">
+            <Icon as={CloudOff} size={14} className="text-primary" />
+            {/* Says WHICH kind of unreachable it is. "No connection" and
+                "server not reachable" need opposite remedies. */}
+            <Text variant="small" className="flex-1">
+              {connectivity === "no-server"
+                ? "Can't reach the server- showing saved events"
+                : "No connection- showing saved events"}
+            </Text>
           </View>
         ) : null}
 
@@ -403,6 +426,7 @@ export default function Index() {
                       key={event.id}
                       event={event}
                       index={i}
+                      isAdding={addingId === event.id}
                       distanceKm={distanceFor(event)}
                       onAdd={() => handleAdd(event)}
                       onBuy={() => handleBuy(event)}
@@ -429,19 +453,6 @@ export default function Index() {
         onDismiss={() => setClash(null)}
       />
 
-      <AlertDialog open={!!purchaseNotice} onOpenChange={(open) => !open && setPurchaseNotice(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{purchaseNotice?.title}</AlertDialogTitle>
-            <AlertDialogDescription>{purchaseNotice?.message}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction onPress={() => setPurchaseNotice(null)}>
-              <Text>Got it</Text>
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </View>
   );
 }

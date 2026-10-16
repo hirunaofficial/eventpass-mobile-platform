@@ -17,6 +17,7 @@ import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { BootScreen } from "@/components/boot-screen";
 import { SyncConflictNotice } from "@/components/sync-conflict-notice";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { loadStoredAppearance } from "@/lib/use-appearance";
@@ -47,7 +48,9 @@ function AuthGate() {
   const isAuthRoute = pathname === "/login" || pathname === "/signup" || pathname === "/staff-login";
 
   if (isLoading) {
-    return null;
+    // Restoring the session from secure storage. Branded rather than
+    // blank so the launch sequence has no empty frame.
+    return <BootScreen />;
   }
 
   if (!user && !isAuthRoute) {
@@ -109,7 +112,10 @@ export default function RootLayout() {
   }, [ready]);
 
   if (!ready) {
-    return null;
+    // Fonts and the stored theme are still loading. The native splash
+    // normally covers this, but Expo Go's splash differs from a dev
+    // build's, so this guarantees a dark frame either way.
+    return <BootScreen />;
   }
 
   return (

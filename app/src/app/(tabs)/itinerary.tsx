@@ -111,7 +111,7 @@ export default function ItineraryScreen() {
 
       <View className="flex-1 px-5">
         {isOffline || pendingSyncCount > 0 ? (
-          <View className="border-border bg-card mb-3 flex-row items-center gap-2 rounded-full border px-4 py-2.5">
+          <View className="border-border bg-card mb-3 flex-row items-center gap-2 rounded-md border px-4 py-2.5">
             <Icon as={CloudOff} size={14} className="text-signal" />
             <Text variant="small">
               {isOffline ? "Offline- showing saved itinerary" : "Back online"}
@@ -169,7 +169,7 @@ export default function ItineraryScreen() {
             <AlertDialogCancel>
               <Text>Close</Text>
             </AlertDialogCancel>
-            <Button onPress={handleRemove} disabled={isRemoving}>
+            <Button variant="destructive" loading={isRemoving} onPress={handleRemove}>
               <Text>{isRemoving ? "Removing..." : "Remove"}</Text>
             </Button>
           </AlertDialogFooter>

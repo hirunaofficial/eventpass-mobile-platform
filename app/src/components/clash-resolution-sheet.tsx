@@ -87,8 +87,17 @@ export function ClashResolutionSheet({
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onDismiss}>
-      <Pressable onPress={onDismiss} className="flex-1 justify-end bg-black/70">
+      <Pressable
+        onPress={onDismiss}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss"
+        className="flex-1 justify-end bg-black/70"
+      >
         <Pressable
+          // Swallows taps so pressing the sheet itself does not dismiss
+          // it; not an interactive control, so hidden from the reader.
+          accessibilityElementsHidden={false}
+          importantForAccessibility="no"
           onPress={(e) => e.stopPropagation()}
           className="border-border bg-background max-h-[85%] rounded-t-card border-t px-5 pb-10 pt-3"
         >
@@ -112,6 +121,8 @@ export function ClashResolutionSheet({
                   <Pressable
                     key={event.id}
                     onPress={() => onChooseAlternative(event)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Add ${event.title} instead, ${formatWhen(event.startsAt)} at ${event.venue.name}`}
                     className="border-border bg-card flex-row items-center gap-3 rounded-xl border p-3"
                   >
                     <View className="h-14 w-14 overflow-hidden rounded-lg">
@@ -135,7 +146,7 @@ export function ClashResolutionSheet({
                       </View>
                     </View>
                     {resolution.sameCategory ? (
-                      <View className="bg-primary/15 rounded-full px-2 py-1">
+                      <View className="bg-primary/15 rounded-sm px-2 py-1">
                         <Text className="text-primary font-ui text-eyebrow uppercase">Similar</Text>
                       </View>
                     ) : null}
@@ -152,6 +163,8 @@ export function ClashResolutionSheet({
                   <Pressable
                     key={dropId}
                     onPress={() => onChooseSwap(dropId)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Drop ${event?.title ?? "the clashing event"} and add ${candidate.title} instead`}
                     className="border-border flex-row items-center gap-3 rounded-xl border border-dashed p-3"
                   >
                     <View className="bg-secondary h-10 w-10 items-center justify-center rounded-full">

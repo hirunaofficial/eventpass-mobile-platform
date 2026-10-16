@@ -87,8 +87,19 @@ export default function StaffLoginScreen() {
               />
             </View>
             {error ? <Text className="text-destructive">{error}</Text> : null}
-            <Button className="bg-primary-foreground mt-2 rounded-md" onPress={handleSubmit} disabled={submitting} size="lg">
-              <Text>{submitting ? "Checking..." : "Continue"}</Text>
+            {/* Staff chrome is INVERTED - acid background, dark button -
+                so the label has to be light. Without the explicit colour
+                it inherits `text-primary-foreground`, which is dark, and
+                the button renders with no visible text at all. */}
+            <Button
+              className="bg-primary-foreground mt-2 rounded-md"
+              onPress={handleSubmit}
+              loading={submitting}
+              size="lg"
+            >
+              <Text className="text-primary font-title">
+                {submitting ? "Checking..." : "Continue"}
+              </Text>
             </Button>
           </View>
 

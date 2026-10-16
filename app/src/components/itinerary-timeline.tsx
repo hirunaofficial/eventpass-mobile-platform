@@ -42,6 +42,26 @@ const PIXELS_PER_MINUTE = 1.1;
 const MIN_BLOCK_HEIGHT = 56;
 const MAX_GAP_HEIGHT = 48;
 const MIN_GAP_HEIGHT = 16;
+/** Past this point a block grows at a reduced rate, then stops. */
+const FULL_SCALE_MINUTES = 120;
+const LONG_PIXELS_PER_MINUTE = 0.25;
+const MAX_BLOCK_HEIGHT = 200;
+
+/**
+ * Block height for an event of `durationMinutes`.
+ *
+ * Strictly proportional heights do not survive real data: an all-day
+ * expo next to a two-hour gig renders as a screen-tall slab of empty
+ * card, which reads as a layout bug rather than as duration. Scaling
+ * is therefore linear over the range where comparisons actually matter
+ * (up to two hours), then compressed and finally capped, so a long
+ * event still reads as longer without swamping the timeline.
+ */
+function blockHeightFor(durationMinutes: number) {
+  const base = Math.min(durationMinutes, FULL_SCALE_MINUTES) * PIXELS_PER_MINUTE;
+  const overflow = Math.max(0, durationMinutes - FULL_SCALE_MINUTES) * LONG_PIXELS_PER_MINUTE;
+  return Math.min(MAX_BLOCK_HEIGHT, Math.max(MIN_BLOCK_HEIGHT, base + overflow));
+}
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString(undefined, { hour: "numeric", minute: "2-digit" });
@@ -113,7 +133,7 @@ export function ItineraryTimeline({
           15,
           (new Date(item.endsAt).getTime() - new Date(item.startsAt).getTime()) / 60000
         );
-        const blockHeight = Math.max(MIN_BLOCK_HEIGHT, durationMinutes * PIXELS_PER_MINUTE);
+        const blockHeight = blockHeightFor(durationMinutes);
 
         let gapHeight = 0;
         let gapLabel: string | null = null;
@@ -139,7 +159,7 @@ export function ItineraryTimeline({
 
             {gapHeight > 0 ? (
               <View className="flex-row" style={{ height: gapHeight }}>
-                <View className="w-16" />
+                <View className="w-20" />
                 <View className="ml-2 flex-1 items-center justify-center">
                   {gapLabel ? (
                     <Text variant="small" className="text-muted-foreground">
@@ -152,11 +172,18 @@ export function ItineraryTimeline({
 
             <Pressable
               onPress={() => (isClashing ? onConflictPress?.(item) : onItemPress?.(item))}
+              accessibilityRole="button"
+              // The clash state is colour-coded visually, so it has to
+              // be stated in the label too.
+              accessibilityLabel={
+                `${item.title} at ${item.venueName}, ${formatTime(item.startsAt)}` +
+                (isClashing ? ". Conflicts with another event" : "")
+              }
               className="flex-row"
               style={{ minHeight: blockHeight }}
             >
-              <View className="w-16 items-end pr-2 pt-1.5">
-                <Text className="text-muted-foreground font-ui text-sm">
+              <View className="w-20 items-end pr-2 pt-1.5">
+                <Text numberOfLines={1} className="text-muted-foreground font-ui text-sm">
                   {formatTime(item.startsAt)}
                 </Text>
               </View>

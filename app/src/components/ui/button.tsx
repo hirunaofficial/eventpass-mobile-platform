@@ -2,7 +2,7 @@ import { TextClassContext } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
 import type * as React from "react";
-import { Platform, Pressable } from "react-native";
+import { ActivityIndicator, Platform, Pressable } from "react-native";
 
 const buttonVariants = cva(
   cn(
@@ -91,16 +91,35 @@ const buttonTextVariants = cva(
 
 type ButtonProps = React.ComponentProps<typeof Pressable> &
   React.RefAttributes<typeof Pressable> &
-  VariantProps<typeof buttonVariants>;
+  VariantProps<typeof buttonVariants> & {
+    /**
+     * Shows a spinner in place of any leading icon and blocks further
+     * presses. Lives on the Button rather than being hand-rolled per
+     * screen so every async action in the app gives the same feedback,
+     * and so no caller can forget to disable the control while its
+     * work is still running - the usual cause of double submissions.
+     */
+    loading?: boolean;
+  };
 
-function Button({ className, variant, size, ...props }: ButtonProps) {
+function Button({ className, variant, size, loading, children, ...props }: ButtonProps) {
+  const isDisabled = props.disabled || loading;
+  // Indicator colour has to contrast with the button's own fill: the
+  // default variant is acid, so its spinner must be dark.
+  const spinnerColor = variant === "default" || variant == null ? "#141210" : "#8A8276";
+
   return (
     <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
       <Pressable
-        className={cn(props.disabled && "opacity-50", buttonVariants({ variant, size }), className)}
+        className={cn(isDisabled && "opacity-50", buttonVariants({ variant, size }), className)}
         role="button"
+        accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
         {...props}
-      />
+        disabled={isDisabled}
+      >
+        {loading ? <ActivityIndicator size="small" color={spinnerColor} /> : null}
+        {children as React.ReactNode}
+      </Pressable>
     </TextClassContext.Provider>
   );
 }
