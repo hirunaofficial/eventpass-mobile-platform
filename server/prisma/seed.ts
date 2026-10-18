@@ -4,9 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 
 // Demo-account credentials come from `.env` (gitignored), with fallbacks
-// so a fresh clone still seeds and runs without any setup. The real
-// passwords for THIS machine live in the repo-root `passwords.md`, which
-// is also gitignored.
+// so a fresh clone still seeds and runs without any setup.
 const STAFF_EMAIL = "staff@eventpass.dev";
 const STAFF_PASSWORD = process.env.STAFF_PASSWORD ?? "staffpass123";
 const DEMO_EMAIL = "demo@eventpass.dev";

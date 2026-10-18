@@ -62,6 +62,16 @@ cd app    && npx expo start     # Metro on :8081
 ```
 
 `server/.env` is required — copy `server/.env.example` and fill it in.
+
+### Demo accounts
+
+Created by the seed script (override with `STAFF_PASSWORD` /
+`DEMO_PASSWORD` in `server/.env`):
+
+| Role | Email | Password |
+|---|---|---|
+| Attendee | `demo@eventpass.dev` | `demopass123` |
+| Staff (check-in only) | `staff@eventpass.dev` | `staffpass123` |
 The app needs no configuration: it derives the API host from Expo's own
 `hostUri`, so it works on whatever network you are on.
 
@@ -69,7 +79,7 @@ The app needs no configuration: it derives the API host from Expo's own
 
 ```bash
 npm run type-check               # all three workspaces
-npm run test -w packages/shared  # constraint algorithm, 13 cases
+npm run test -w packages/shared  # both constraint systems, 27 cases
 ```
 
 ---
@@ -81,6 +91,9 @@ npm run test -w packages/shared  # constraint algorithm, 13 cases
 - **Plan** — constraint-checked itinerary on a hand-built timeline, with
   clashes highlighted and repairs offered
 - **Tickets** — purchase with an atomic capacity guard, QR wallet
+- **Checkout** — card validation as a second constraint system (Luhn
+  checksum, issuer, brand-specific lengths, expiry), simulated
+  authorisation; saved cards never store the full number or CVC
 - **Check-in** — staff-only camera scanner, single-use enforcement
 - **Offline** — full offline reads plus queued writes that sync on
   reconnect
@@ -112,7 +125,8 @@ QR, and check in from a saved image when one device must do both ends).
 
 ## Custom components
 
-Three are hand-built rather than taken from a library:
+Nine components are hand-built rather than taken from a library. The
+four main ones:
 
 - **`ItineraryTimeline`** — time-proportional vertical timeline, no
   calendar library. Computes its own clash set by calling the shared
@@ -120,6 +134,8 @@ Three are hand-built rather than taken from a library:
 - **`FloatingTabBar`** — detached pill, spring-animated on the UI
   thread, icon weight changes on focus.
 - **`ClashResolutionSheet`** — surfaces the solver's repair options.
+- **`CardInput`** — a constrained card field that formats as you type
+  and adapts its limits to the detected card brand.
 
 ---
 
