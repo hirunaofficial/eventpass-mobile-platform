@@ -4,8 +4,7 @@ A mobile platform for discovering live events, planning which ones to
 attend, buying tickets, and checking in at the door.
 
 Built for **SE5070 – Enterprise Mobility**, M.Sc. in IT, SLIIT.
-Domain allocated by index number: `MS26928388` → digit sum 46 → 46 mod 5
-= 1 → **Entertainment**.
+Assigned domain: **Entertainment**.
 
 ---
 
@@ -93,7 +92,10 @@ npm run test -w packages/shared  # both constraint systems, 27 cases
 - **Tickets** — purchase with an atomic capacity guard, QR wallet
 - **Checkout** — card validation as a second constraint system (Luhn
   checksum, issuer, brand-specific lengths, expiry), simulated
-  authorisation; saved cards never store the full number or CVC
+  authorisation; saved cards never store the full number or CVC. The
+  app runs validation in a relaxed demo mode (checksum and brand rules
+  skipped, so any plausible test number works); the strict rules are
+  covered by the tests
 - **Check-in** — staff-only camera scanner, single-use enforcement
 - **Offline** — full offline reads plus queued writes that sync on
   reconnect
